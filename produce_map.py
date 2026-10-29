@@ -1,4 +1,7 @@
-"""Build the UTCI extreme-day summary GeoTIFF, plain PNG maps and MapLibre sidecars."""
+"""
+Build the UTCI extreme-day summary GeoTIFF, 
+plain PNG maps and MapLibre sidecars.
+"""
 
 import calendar
 import json
@@ -33,8 +36,27 @@ HEAT_PNG_PATH = OUTPUT_DIR / "utci_heat_days.png"
 COLD_JSON_PATH = OUTPUT_DIR / "utci_cold_days.json"
 HEAT_JSON_PATH = OUTPUT_DIR / "utci_heat_days.json"
 
-COLD_COLORS = ["#daccc9", "#b8d4c8", "#72b6b5", "#4792b1", "#0f588f", "#042b48"]
-HEAT_COLORS = ["#daccc9", "#fdbe9d", "#ef8a82", "#c8596c", "#993233"]
+# Cold map: days/year with daily minimum UTCI below 9 °C.
+# Runs from a neutral warm grey (few cold days) to deep navy (many).
+COLD_COLORS = [
+    "#daccc9",  # pale warm grey (light taupe) - fewest days; shared start colour
+    "#b8d4c8",  # pale sage green / light seafoam
+    "#72b6b5",  # muted teal (soft aqua)
+    "#4792b1",  # steel blue
+    "#0f588f",  # deep azure blue
+    "#042b48",  # very dark navy - most days
+]
+
+# Heat map: days/year with daily maximum UTCI above 26 °C.
+# Runs from the same neutral grey (few hot days) to dark red (many).
+HEAT_COLORS = [
+    "#daccc9",  # pale warm grey (light taupe) - fewest days; shared start colour
+    "#fdbe9d",  # light peach (pale apricot)
+    "#ef8a82",  # salmon / coral pink
+    "#c8596c",  # dusty rose (raspberry)
+    "#993233",  # dark brick red (burgundy) - most days
+]
+
 DISCRETE_COLORS = False  # True = use only the palette steps, no blending
 PNG_SCALE = 1  # 1 = native size; >1 enlarges with nearest-neighbour (coordinates are unaffected)
 
@@ -46,37 +68,92 @@ PEAK_MAX = "utci_yearly_max"
 PEAK_MIN = "utci_yearly_min"
 INF = float("inf")
 
-# Daily-max brackets come from cumulative "above" variables.
-ABOVE_THRESHOLDS = (26, 32, 38, 46)
-# Daily-min brackets come from cumulative "below" variables.
-BELOW_THRESHOLDS = (-40, -27, -13, 0, 9)
 
 
-def fmt(value: float) -> str:
+def format_bound(value: float) -> str:
+    """
+    Format a bracket bound for 
+    band/variable names and messages
+    """
+
     if value == INF:
         return "inf"
+
     if value == -INF:
         return "-inf"
+
     return f"{value:g}"
 
 
 MAX_BRACKETS = [(26, 32), (32, 38), (38, 46), (46, INF)]
 MIN_BRACKETS = [(-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9)]
 
-MAX_BAND_NAMES = [f"days_daily_max_{fmt(lo)}_{fmt(hi)}" for lo, hi in MAX_BRACKETS]
-MIN_BAND_NAMES = [f"days_daily_min_{fmt(lo)}_{fmt(hi)}" for lo, hi in MIN_BRACKETS]
+def bracket_thresholds(brackets, threshold_direction):
+    """
+    Cumulative-count thresholds that the brackets are built from.
 
-REQUIRED_VARIABLES = (
+    "above": the lower edge of every bracket (the last one must be open-ended).
+    "below": the upper edge of every bracket (the first one must be open-ended).
+    """
+
+    THRESHOLD_STATISTIC = {"above": "daily_max", "below": "daily_min"}
+
+    if threshold_direction not in THRESHOLD_STATISTIC:
+        raise ValueError(
+            f"threshold_direction must be 'above' or 'below', got {threshold_direction!r}"
+        )
+
+    for (_, upper_bound), (lower_bound, _) in zip(brackets, brackets[1:]):
+        if upper_bound != lower_bound:
+            raise ValueError(f"Brackets are not contiguous: {upper_bound} != {lower_bound}")
+
+    if threshold_direction == "above":
+
+        if brackets[-1][1] != INF:
+            raise ValueError(
+                "The last 'above' bracket must be open-ended (upper bound inf), "
+                f"but its upper bound is {format_bound(brackets[-1][1])} "
+                f"(bracket: {format_bound(brackets[-1][0])} to {format_bound(brackets[-1][1])})"
+            )
+        return tuple(lower_bound for lower_bound, _ in brackets)
+
+    if brackets[0][0] != -INF:
+
+        raise ValueError(
+            "The first 'below' bracket must be open-ended (lower bound -inf), "
+            f"but its lower bound is {format_bound(brackets[0][0])} "
+            f"(bracket: {format_bound(brackets[0][0])} to {format_bound(brackets[0][1])})"
+        )
+
+    return tuple(upper_bound for _, upper_bound in brackets)
+
+ABOVE_THRESHOLDS = bracket_thresholds(MAX_BRACKETS, "above")  # (26, 32, 38, 46)
+BELOW_THRESHOLDS = bracket_thresholds(MIN_BRACKETS, "below")  # (-40, -27, -13, 0, 9)
+
+def build_band_names(prefix: str, brackets) -> list[str]:
+    """
+    Build one band name per bracket, 
+    e.g. 'days_daily_max_26_32'.
+    """
+
+    return [
+        f"{prefix}_{format_bound(lower_bound)}_{format_bound(upper_bound)}"
+        for lower_bound, upper_bound in brackets
+    ]
+
+
+MAX_BAND_NAMES = build_band_names("days_daily_max", MAX_BRACKETS)
+MIN_BAND_NAMES = build_band_names("days_daily_min", MIN_BRACKETS)
+
+# NetCDF variables that every yearly-statistics file must contain: 
+# the yearly peaks plus one day-count variable per threshold
+REQUIRED_NETCDF_VARIABLES = (
     [PEAK_MAX, PEAK_MIN]
     + [f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS]
     + [f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS]
 )
 
-TIME_UNITS_RE = re.compile(
-    r"^(seconds|hours|days) since (\d{4})-(\d{1,2})-(\d{1,2})"
-    r"(?:[ T](\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?)?(?: ?(?:UTC|Z))?$"
-)
-SECONDS_PER_UNIT = {"seconds": 1.0, "hours": 3600.0, "days": 86400.0}
+
 
 
 @dataclass(frozen=True)
@@ -99,21 +176,59 @@ class YearlyStats:
 
 # ---------------------------------------------------------------- loading
 def subdataset_uris(nc_file: Path) -> dict[str, str]:
-    """Map NetCDF variable name -> GDAL subdataset URI."""
+    """
+    Map NetCDF variable name -> GDAL subdataset URI.
+
+    GDAL exposes each variable of a NetCDF file as a subdataset URI, and the
+    variable name is the text after the last colon, e.g.:
+
+        'NETCDF:"utci_iceland_sample/utci_2015.nc":utci_yearly_max'
+            -> {"utci_yearly_max": 'NETCDF:"utci_iceland_sample/utci_2015.nc":utci_yearly_max'}
+
+        'NETCDF:"utci_iceland_sample/utci_2015.nc":utci_days_above_26_daily_max'
+            -> {"utci_days_above_26_daily_max": 'NETCDF:"utci_iceland_sample/utci_2015.nc":utci_days_above_26_daily_max'}
+    """
+
     with rasterio.open(nc_file) as parent:
         uris = parent.subdatasets
+
     return {uri.rsplit(":", 1)[-1].strip('"'): uri for uri in uris}
 
 
 def year_of_time_coordinate(dataset_tags: dict, band_tags: dict) -> int:
-    calendar_name = dataset_tags.get("time#calendar", "standard")
-    if calendar_name not in {"standard", "gregorian", "proleptic_gregorian"}:
-        raise ValueError(f"Unsupported time calendar: {calendar_name!r}")
+    """
+    Convert a NetCDF time step, stored as an offset from a reference date, into its calendar year.
 
-    units = dataset_tags.get("time#units", "")
-    match = TIME_UNITS_RE.match(units)
+    E.g. 8760 with units "hours since 2015-01-01" -> 2016.
+    """
+
+    # Date part of the units string, e.g. "2015-01-01" or "2015-1-1"
+    DATE_PATTERN = r"(\d{4})-(\d{1,2})-(\d{1,2})"
+    # Optional time part, e.g. " 00:00:00", "T06:30:00" or " 12:00:00.5"
+    TIME_PATTERN = r"(?:[ T](\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?)"
+    TIMEZONE_PATTERN = r"(?:UTC|Z)"
+
+    TIME_UNITS_RE = re.compile(
+        rf"^(seconds|hours|days) since {DATE_PATTERN}{TIME_PATTERN}?(?: ?{TIMEZONE_PATTERN})?$"
+    )
+
+    SECONDS_PER_UNIT = {"seconds": 1.0, "hours": 3600.0, "days": 86400.0}
+    SUPPORTED_CALENDARS = {"standard", "gregorian", "proleptic_gregorian"}
+
+    calendar_name = dataset_tags.get("time#calendar")
+    if calendar_name not in SUPPORTED_CALENDARS:
+        raise ValueError(
+            f"Unsupported or missing time calendar (tag 'time#calendar'): {calendar_name!r}; "
+            f"expected one of {sorted(SUPPORTED_CALENDARS)}"
+        )
+
+    units = dataset_tags.get("time#units")
+    match = TIME_UNITS_RE.match(units) if isinstance(units, str) else None
     if not match:
-        raise ValueError(f"Unsupported time units: {units!r}")
+        raise ValueError(
+            f"Unsupported or missing time units (tag 'time#units'): {units!r}; "
+            "expected e.g. 'hours since 2015-01-01 00:00:00'"
+        )
     unit, year, month, day, hour, minute, second = match.groups()
     origin = datetime(
         int(year), int(month), int(day),
@@ -122,86 +237,170 @@ def year_of_time_coordinate(dataset_tags: dict, band_tags: dict) -> int:
     )
 
     raw = band_tags.get("NETCDF_DIM_time")
-    if raw is None or not math.isfinite(float(raw)):
-        raise ValueError(f"Invalid time coordinate: {raw!r}")
-    return (origin + timedelta(seconds=float(raw) * SECONDS_PER_UNIT[unit])).year
+
+    try:
+        offset = float(raw)
+
+    except (TypeError, ValueError):
+        offset = math.nan
+
+    if not math.isfinite(offset):
+        raise ValueError(f"Invalid time coordinate (tag 'NETCDF_DIM_time'): {raw!r}")
+
+    return (origin + timedelta(seconds=offset * SECONDS_PER_UNIT[unit])).year
 
 
 def check_geographic(dataset_tags: dict, nc_file: Path, name: str) -> None:
+
     expected = {"lat#units": "degrees_north", "lon#units": "degrees_east"}
+
     for key, value in expected.items():
+
         found = dataset_tags.get(key)
+
         if found is not None and found != value:
             raise ValueError(f"{nc_file.name}:{name}: {key}={found!r}, expected {value!r}")
 
 
 def transforms_match(a, b) -> bool:
+    """
+    Check that two rasters sit on the same grid, 
+    tolerating tiny floating-point differences.
+    """
     return np.allclose(tuple(a)[:6], tuple(b)[:6], rtol=0.0, atol=1e-9)
 
 
-def read_physical(src, band: int, name: str, nc_file: Path) -> np.ndarray:
-    """Read one band, mask missing values and apply this variable's scale/offset."""
-    scale = float(src.scales[band - 1])
-    offset = float(src.offsets[band - 1])
+def read_physical(time_series_raster, band: int, name: str, nc_file: Path) -> np.ndarray:
+    """
+    Read one band, 
+    mask missing values and 
+    apply this variable's scale/offset.
+    """
+
+    scale = float(time_series_raster.scales[band - 1])
+    offset = float(time_series_raster.offsets[band - 1])
+
     if not math.isfinite(scale) or scale <= 0:
         raise ValueError(f"{nc_file.name}:{name}: invalid scale_factor {scale!r}")
     if not math.isfinite(offset):
         raise ValueError(f"{nc_file.name}:{name}: invalid add_offset {offset!r}")
 
-    raw = src.read(band, masked=True).astype(np.float64)
+    raw = time_series_raster.read(band, masked=True).astype(np.float64)
     values = raw.filled(np.nan) * scale + offset
     values[~np.isfinite(values)] = np.nan
+
     return values
 
 
+@dataclass(frozen=True)
+class VariableRecords:
+    years: list[int]
+    arrays: list[np.ndarray]  # one 2-D array per time step
+    shape: tuple[int, int]
+    transform: Affine
+    peak_unit: str | None  # only set for the yearly peak variables
+
+
+def check_north_up_grid(src, nc_file: Path, name: str) -> None:
+    """
+    Reject rotated or south-up grids, 
+    which the rest of the pipeline can't handle.
+    """
+
+    t = src.transform
+    if t.a <= 0 or t.e >= 0 or abs(t.b) > 1e-12 or abs(t.d) > 1e-12:
+        raise ValueError(f"{nc_file.name}:{name}: grid is not an unrotated north-up raster")
+
+
+def read_peak_unit(src, tags: dict, name: str) -> str:
+    """
+    Find the units of a yearly peak variable, or '' 
+    if the file doesn't declare any.
+    """
+
+    unit = src.units[0] or src.tags(1).get("units") or tags.get(f"{name}#units") or ""
+    return str(unit)
+
+
+def read_variable(uri: str, nc_file: Path, name: str) -> VariableRecords:
+    """
+    Open one variable, validate its grid and 
+    time axis, and read all its time steps.
+    """
+
+    with rasterio.open(uri) as src:
+        tags = src.tags()
+        check_geographic(tags, nc_file, name)
+        check_north_up_grid(src, nc_file, name)
+        if not src.indexes:
+            raise ValueError(f"{nc_file.name}:{name}: no time steps")
+
+        return VariableRecords(
+            years=[year_of_time_coordinate(tags, src.tags(b)) for b in src.indexes],
+            arrays=[read_physical(src, b, name, nc_file) for b in src.indexes],
+            shape=src.shape,
+            transform=src.transform,
+            peak_unit=read_peak_unit(src, tags, name) if name in (PEAK_MAX, PEAK_MIN) else None,
+        )
+
+
+def check_matches_reference(
+    variable: VariableRecords, reference: VariableRecords,
+    nc_file: Path, name: str, reference_name: str,
+) -> None:
+    """
+    Require the same years and 
+    grid as the reference variable.
+    """
+
+    if variable.years != reference.years:
+        raise ValueError(f"{nc_file.name}:{name}: time axis differs from {reference_name}")
+    if variable.shape != reference.shape or not transforms_match(variable.transform, reference.transform):
+        raise ValueError(f"{nc_file.name}:{name}: grid differs from {reference_name}")
+
+
 def read_yearly_file(nc_file: Path) -> FileRecords | None:
+    """
+    Read every required variable of one file, 
+    or return None if it isn't a yearly-statistics file.
+    """
+
     uris = subdataset_uris(nc_file)
     if PEAK_MAX not in uris or PEAK_MIN not in uris:
         return None
-    missing = [v for v in REQUIRED_VARIABLES if v not in uris]
+
+    missing = [v for v in REQUIRED_NETCDF_VARIABLES if v not in uris]
     if missing:
         raise KeyError(f"{nc_file.name} lacks variables: {missing}")
 
-    years: list[int] | None = None
-    shape = transform = None
+    reference_name = REQUIRED_NETCDF_VARIABLES[0]
+    reference: VariableRecords | None = None
     arrays: dict[str, list[np.ndarray]] = {}
     peak_units: dict[str, str] = {}
 
-    for name in REQUIRED_VARIABLES:
-        with rasterio.open(uris[name]) as src:
-            tags = src.tags()
-            check_geographic(tags, nc_file, name)
+    for name in REQUIRED_NETCDF_VARIABLES:
+        variable = read_variable(uris[name], nc_file, name)
 
-            t = src.transform
-            if t.a <= 0 or t.e >= 0 or abs(t.b) > 1e-12 or abs(t.d) > 1e-12:
-                raise ValueError(f"{nc_file.name}:{name}: grid is not an unrotated north-up raster")
-            if not src.indexes:
-                raise ValueError(f"{nc_file.name}:{name}: no time steps")
+        if reference is None:
+            reference = variable
+        else:
+            check_matches_reference(variable, reference, nc_file, name, reference_name)
 
-            band_years = [year_of_time_coordinate(tags, src.tags(b)) for b in src.indexes]
-            if years is None:
-                years, shape, transform = band_years, src.shape, src.transform
-            else:
-                if band_years != years:
-                    raise ValueError(f"{nc_file.name}:{name}: time axis differs from {REQUIRED_VARIABLES[0]}")
-                if src.shape != shape or not transforms_match(src.transform, transform):
-                    raise ValueError(f"{nc_file.name}:{name}: grid differs from {REQUIRED_VARIABLES[0]}")
+        arrays[name] = variable.arrays
+        if variable.peak_unit is not None:
+            peak_units[name] = variable.peak_unit
 
-            arrays[name] = [read_physical(src, b, name, nc_file) for b in src.indexes]
-
-            if name in (PEAK_MAX, PEAK_MIN):
-                unit = src.units[0] or src.tags(1).get("units") or tags.get(f"{name}#units") or ""
-                peak_units[name] = str(unit)
-
-    return FileRecords(years, arrays, peak_units, shape, transform)
+    return FileRecords(reference.years, arrays, peak_units, reference.shape, reference.transform)
 
 
 def load_yearly_statistics() -> YearlyStats:
+
     records: list[tuple[int, dict[str, np.ndarray]]] = []
     grid = None
     peak_units: dict[str, str] | None = None
 
     for nc_file in sorted(DATA_DIR.glob("*.nc")):
+
         loaded = read_yearly_file(nc_file)
         if loaded is None:
             continue
@@ -216,7 +415,7 @@ def load_yearly_statistics() -> YearlyStats:
                 raise ValueError(f"{nc_file.name}: peak units {loaded.peak_units} differ from {peak_units}")
 
         for position, year in enumerate(loaded.years):
-            records.append((year, {n: loaded.arrays[n][position] for n in REQUIRED_VARIABLES}))
+            records.append((year, {n: loaded.arrays[n][position] for n in REQUIRED_NETCDF_VARIABLES}))
 
     if not records:
         raise FileNotFoundError(f"No yearly-statistics files in {DATA_DIR.resolve()}")
@@ -229,14 +428,16 @@ def load_yearly_statistics() -> YearlyStats:
     duplicates = sorted({int(y) for y in years if (years == y).sum() > 1})
     if duplicates:
         raise ValueError(f"Duplicate yearly records for: {duplicates}")
+
     missing_years = sorted(set(range(START_YEAR, END_YEAR + 1)) - set(years.tolist()))
     if missing_years and REQUIRE_COMPLETE_PERIOD:
         raise ValueError(f"Missing years: {missing_years}")
+
     if missing_years:
         print(f"WARNING: missing years {missing_years}; using {years.size} years")
 
     records.sort(key=lambda r: r[0])
-    cubes = {n: np.stack([r[1][n] for r in records]) for n in REQUIRED_VARIABLES}
+    cubes = {n: np.stack([r[1][n] for r in records]) for n in REQUIRED_NETCDF_VARIABLES}
     return YearlyStats(
         years=np.array([r[0] for r in records], dtype=int),
         cubes=cubes, peak_units=peak_units, shape=grid[0], transform=grid[1],
@@ -249,19 +450,24 @@ def cube(annual: YearlyStats, name: str) -> np.ndarray:
 
 # ------------------------------------------------------------ computation
 def peaks_to_celsius(annual: YearlyStats):
+
     hot, cold = cube(annual, PEAK_MAX), cube(annual, PEAK_MIN)
     kelvin_units = {"k", "kelvin", "degrees_k", "degree_k"}
     celsius_units = {"c", "°c", "degc", "celsius", "degree_celsius", "degrees_celsius"}
     units = {annual.peak_units[n].strip().lower() for n in (PEAK_MAX, PEAK_MIN)}
+
     if len(units) != 1:
         raise ValueError(f"Inconsistent units on yearly peaks: {units}")
     unit = units.pop()
 
     if unit in kelvin_units:
         is_kelvin = True
+
     elif unit in celsius_units:
         is_kelvin = False
+
     elif unit == "":
+
         low = float(np.nanmin([np.nanmin(hot), np.nanmin(cold)]))
         high = float(np.nanmax([np.nanmax(hot), np.nanmax(cold)]))
         if 150.0 <= low and high <= 350.0:
@@ -279,9 +485,11 @@ def peaks_to_celsius(annual: YearlyStats):
 
 def disjoint_counts(annual, direction, thresholds, stat, brackets):
     """Differences of cumulative counts -> per-year counts per bracket."""
+
     cum = {t: cube(annual, f"utci_days_{direction}_{t}_{stat}") for t in thresholds}
     if direction == "above":
         parts = [cum[26] - cum[32], cum[32] - cum[38], cum[38] - cum[46], cum[46]]
+
     else:
         parts = [
             cum[-40],
@@ -290,27 +498,34 @@ def disjoint_counts(annual, direction, thresholds, stat, brackets):
             cum[0] - cum[-13],
             cum[9] - cum[0],
         ]
+
     for part, bracket in zip(parts, brackets):
+
         if np.isfinite(part).any() and np.nanmin(part) < -1e-6:
             raise ValueError(
                 f"{stat} bracket {bracket}: negative counts; "
                 "the cumulative variables are not nested as assumed."
             )
+
     return parts
 
 
 def record_with_year(values, years, use_max: bool):
     """Record value per pixel and the first year it occurred."""
+
     if use_max:
         record, idx = np.max(values, axis=0), np.argmax(values, axis=0)
+
     else:
         record, idx = np.min(values, axis=0), np.argmin(values, axis=0)
+
     year = years[idx].astype(np.float64)
     year[~np.isfinite(record)] = np.nan
     return record, year
 
 
 def build_bands(annual: YearlyStats):
+
     years = annual.years
     bands = []  # (name, 2-D array, units)
 
@@ -354,8 +569,10 @@ def build_bands(annual: YearlyStats):
 
 # -------------------------------------------------------------------- I/O
 def write_geotiff(path: Path, bands, transform):
+
     path.parent.mkdir(parents=True, exist_ok=True)
     height, width = bands[0][1].shape
+
     with rasterio.open(
         path, "w", driver="GTiff", height=height, width=width,
         count=len(bands), dtype="float32", crs="EPSG:4326",
@@ -381,6 +598,7 @@ def hex_to_rgb(color: str) -> tuple[int, int, int]:
 
 def palette_rgb(colors: list[str]) -> np.ndarray:
     """RGB colour of every data index 0..MAX_INDEX, shape (MAX_INDEX + 1, 3)."""
+
     fraction = np.arange(MAX_INDEX + 1) / MAX_INDEX
     palette = np.array([hex_to_rgb(c) for c in colors], dtype=np.float64)
 
@@ -395,6 +613,7 @@ def palette_rgb(colors: list[str]) -> np.ndarray:
 
 def to_indices(values: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
     """Quantise values to palette indices; missing pixels get NODATA_INDEX."""
+
     valid = np.isfinite(values)
     fraction = np.where(valid, np.clip((values - vmin) / (vmax - vmin), 0.0, 1.0), 0.0)
     indices = np.rint(fraction * MAX_INDEX).astype(np.uint8)
@@ -408,6 +627,7 @@ def reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bou
     Returns the reprojected array and its true (west, south, east, north) edges
     in WGS84 longitude/latitude.
     """
+
     height, width = values.shape
     dst_transform, dst_width, dst_height = calculate_default_transform(
         src_crs, WEBMERCATOR_CRS, width, height, *src_bounds
@@ -429,6 +649,7 @@ def write_map(
     column: str, units: str, vmin: float, vmax: float, raw_min: float, raw_max: float,
 ) -> None:
     """Write a palette-indexed PNG (index 255 = transparent nodata) and its MapLibre sidecar."""
+
     rgb = palette_rgb(colors)
     image = Image.fromarray(to_indices(values, vmin, vmax))
 
@@ -476,6 +697,7 @@ def write_map(
 def render_map(
     total, crs, transform, bounds, colors, png_path: Path, json_path: Path, column: str, units: str
 ) -> None:
+
     if not np.isfinite(total).any():
         raise ValueError(f"No valid pixels to plot for {png_path.name}")
     if PNG_SCALE < 1:
@@ -484,6 +706,7 @@ def render_map(
     raw_min, raw_max = float(np.nanmin(total)), float(np.nanmax(total))
     print(f"{png_path.name}: min {raw_min:.1f} (lightest), max {raw_max:.1f} (darkest)")
     vmin, vmax = raw_min, raw_max
+
     if vmax == vmin:
         print(f"  All pixels equal ({vmin:.1f}); the whole map will be the lightest colour.")
         vmax = vmin + 1.0
@@ -499,16 +722,22 @@ def render_map(
 
 
 def render_pngs(tif_path: Path):
+
     with rasterio.open(tif_path) as src:
+
         index = {desc: i for i, desc in enumerate(src.descriptions, start=1)}
         missing = [n for n in MIN_BAND_NAMES + MAX_BAND_NAMES if n not in index]
+
         if missing:
             raise KeyError(f"Bands missing in {tif_path}: {missing}")
+
         missing = [n for n in (COLD_TOTAL_BAND, HEAT_TOTAL_BAND) if n not in index]
         if missing:
             raise KeyError(f"Bands missing in {tif_path}: {missing}")
+
         if src.crs is None:
             raise ValueError(f"{tif_path} has no CRS")
+
         cold_days = src.read(index[COLD_TOTAL_BAND]).astype(np.float64)
         heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
         crs, transform, bounds = src.crs, src.transform, src.bounds
@@ -520,6 +749,7 @@ def render_pngs(tif_path: Path):
 
 
 def main():
+    
     annual = load_yearly_statistics()
     print(f"Years used ({annual.years.size}): {annual.years.tolist()}")
     print(f"Grid: {annual.shape[0]} x {annual.shape[1]} pixels")
