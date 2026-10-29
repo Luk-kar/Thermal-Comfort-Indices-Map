@@ -1,7 +1,7 @@
 """Run from the project root with: python -m utci_map."""
 
 from .source import config
-from .source.computation.bands import build_bands
+from .source.computation.thermal_stress_summary import build_bands
 from .source.products.geotiff import write_geotiff
 from .source.products.maps.png_maps import render_pngs
 from .source.loading.combine_yearly_utci_statistics import load_yearly_statistics

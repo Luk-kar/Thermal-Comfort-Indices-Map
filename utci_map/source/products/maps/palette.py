@@ -52,5 +52,6 @@ def to_indices(values: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
     fraction = np.where(valid, np.clip((values - vmin) / (vmax - vmin), 0.0, 1.0), 0.0)
     indices = np.rint(fraction * MAX_INDEX).astype(np.uint8)
     indices[~valid] = NODATA_INDEX
+    
     return indices
 

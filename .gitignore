@@ -4,5 +4,6 @@ utci_iceland_sample
 *_summary.csv
 __pycache__/*
 __pycache__
+*.pyc
 !README.md
 *.md
