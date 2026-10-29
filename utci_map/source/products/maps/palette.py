@@ -8,7 +8,7 @@ import re
 
 import numpy as np
 
-from ..config import MAX_INDEX, NODATA_INDEX
+from ...config import MAX_INDEX, NODATA_INDEX
 
 def hex_to_rgb(color: str) -> tuple[int, int, int]:
 
@@ -53,3 +53,4 @@ def to_indices(values: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
     indices = np.rint(fraction * MAX_INDEX).astype(np.uint8)
     indices[~valid] = NODATA_INDEX
     return indices
+

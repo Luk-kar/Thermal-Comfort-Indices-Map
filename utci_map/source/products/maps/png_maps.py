@@ -1,6 +1,5 @@
 """Reproject maps and write indexed PNGs with MapLibre JSON sidecars."""
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -10,10 +9,11 @@ from rasterio.crs import CRS
 from rasterio.transform import array_bounds
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 
-from ..config import MAX_INDEX, NODATA_INDEX, COLOR_MAP_STEP
-from .geotiff import band_indices
+from ...config import MAX_INDEX, NODATA_INDEX
+from ..geotiff import band_indices
 from .palette import palette_rgb, to_indices
-from ..schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MIN_BAND_NAMES, MAX_BAND_NAMES
+from .sidecar import write_sidecar
+from ...schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MIN_BAND_NAMES, MAX_BAND_NAMES
 
 WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 
@@ -66,32 +66,20 @@ def write_map(
     alpha = bytes([255] * NODATA_INDEX + [0])
     image.save(png_path, transparency=alpha)
 
-    west, south, east, north = (round(float(v), 6) for v in lonlat_bounds)
-    entries = [*range(0, MAX_INDEX, COLOR_MAP_STEP), MAX_INDEX]
-    sidecar = {
-        "image": png_path.name,
-        "crs": WEBMERCATOR_CRS.to_string(),
-        "coordinates": [[west, north], [east, north], [east, south], [west, south]],
-        "metric": {
-            "column": column,
-            "min": round(vmin, 6),
-            "max": round(vmax, 6),
-            "units": units,
-            "raw_min": round(raw_min, 6),
-            "raw_max": round(raw_max, 6),
-        },
-        "nodata": {"palette_index": NODATA_INDEX, "alpha": 0},
-        "color_map": [
-            {
-                "index": i,
-                "rgb": [int(c) for c in rgb[i]],
-                "value": round(vmin + (vmax - vmin) * i / MAX_INDEX, 4),
-            }
-            for i in entries
-        ],
-    }
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    write_sidecar(
+        json_path=json_path,
+        png_path=png_path,
+        lonlat_bounds=lonlat_bounds,
+        crs=WEBMERCATOR_CRS.to_string(),
+        rgb=rgb,
+        column=column,
+        units=units,
+        vmin=vmin,
+        vmax=vmax,
+        raw_min=raw_min,
+        raw_max=raw_max,
+    )
+
 
 
 def render_map(
@@ -148,3 +136,4 @@ def render_pngs(
                cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors)
     render_map(heat_days, crs, transform, bounds, heat_colors,
                heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors)
+

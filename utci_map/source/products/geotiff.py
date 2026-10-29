@@ -56,3 +56,4 @@ def band_indices(src, required_names) -> dict[str, int]:
     if missing:
         raise KeyError(f"Bands missing in {src.name}: {missing}")
     return index
+

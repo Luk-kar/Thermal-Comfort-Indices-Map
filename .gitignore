@@ -2,3 +2,7 @@
 utci_iceland_sample
 *.zip
 *_summary.csv
+__pycache__/*
+__pycache__
+!README.md
+*.md

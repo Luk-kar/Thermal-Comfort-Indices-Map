@@ -3,8 +3,8 @@
 from .source import config
 from .source.computation.bands import build_bands
 from .source.products.geotiff import write_geotiff
-from .source.products.png_maps import render_pngs
-from .source.loading.yearly_stats import load_yearly_statistics
+from .source.products.maps.png_maps import render_pngs
+from .source.loading.combine_yearly_utci_statistics import load_yearly_statistics
 
 
 def main():

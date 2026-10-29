@@ -23,7 +23,7 @@ Modules:
 - schema.py: variable names, thresholds, brackets and band naming
 - models.py: immutable data containers
 - netcdf_reader.py: per-file reading and validation
-- yearly_stats.py: cross-file assembly and period validation
+- combine_yearly_utci_statistics.py: cross-file assembly and period validation
 - bands.py: summary calculations and unit conversion
 - geotiff.py: GeoTIFF writer and band-description lookup
 - palette.py: colour interpolation and quantisation
