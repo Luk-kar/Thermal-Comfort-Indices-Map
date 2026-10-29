@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Output PNG preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #app { display: flex; height: 100%; }
+    #sidebar { width: 300px; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; box-sizing: border-box; }
+    #map { flex: 1; }
+    #files { list-style: none; padding: 0; margin: 8px 0; }
+    #files li { padding: 6px 8px; cursor: pointer; border-radius: 4px; word-break: break-all; font-size: 13px; }
+    #files li:hover { background: #eee; }
+    #files li.active { background: #cfe3ff; }
+    label { display: block; margin-top: 12px; font-size: 13px; }
+    input[type=range] { width: 100%; }
+    #status { font-size: 12px; color: #a00; margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h3>PNG files in <code>output/</code></h3>
+    <ul id="files"></ul>
+    <label>Opacity: <span id="opacityVal">0.8</span>
+      <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.8" />
+    </label>
+    <label><input id="fit" type="checkbox" checked /> Fit map to image on select</label>
+    <div id="status"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+  // ---- CONFIG ---------------------------------------------------------
+  // Path relative to this HTML file (frontend/ -> ../output/).
+  const OUTPUT_DIR = "../output/";
+
+  // Bounds of the PNGs in lon/lat (EPSG:4326): [west, south, east, north].
+  // Taken from the NetCDF subset name: N=67.5, E=-13.0, S=63.0, W=-25.0.
+  const DEFAULT_BOUNDS = [-25.0, 63.0, -13.0, 67.5];
+
+  // Optional per-file bounds overrides, e.g. { "utci_mean.png": [w, s, e, n] }.
+  const BOUNDS_BY_FILE = {};
+
+  // Fallback list, used when the server gives no directory listing.
+  const MANUAL_FILES = [
+    // "utci_mean_2016.png",
+  ];
+  // ---------------------------------------------------------------------
+
+  const SOURCE_ID = "output-png";
+  const LAYER_ID = "output-png-layer";
+
+  const map = new maplibregl.Map({
+    container: "map",
+    center: [-19, 65.25],
+    zoom: 5,
+    style: {
+      version: 8,
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+      layers: [{ id: "osm", type: "raster", source: "osm" }],
+    },
+  });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.ScaleControl());
+
+  const $files = document.getElementById("files");
+  const $opacity = document.getElementById("opacity");
+  const $opacityVal = document.getElementById("opacityVal");
+  const $fit = document.getElementById("fit");
+  const $status = document.getElementById("status");
+
+  const boundsToCoords = ([w, s, e, n]) => [[w, n], [e, n], [e, s], [w, s]];
+
+  async function listPngs() {
+    try {
+      const res = await fetch(OUTPUT_DIR);
+      if (!res.ok) throw new Error(res.status);
+      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const names = [...doc.querySelectorAll("a")]
+        .map(a => decodeURIComponent(a.getAttribute("href").split("?")[0]))
+        .filter(h => h.toLowerCase().endsWith(".png"))
+        .map(h => h.split("/").pop());
+      if (names.length) return [...new Set(names)].sort();
+    } catch (e) { /* fall through */ }
+    return MANUAL_FILES;
+  }
+
+  function showImage(name) {
+    const bounds = BOUNDS_BY_FILE[name] || DEFAULT_BOUNDS;
+    const url = OUTPUT_DIR + encodeURIComponent(name);
+    $status.textContent = "";
+
+    if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+    if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+
+    map.addSource(SOURCE_ID, { type: "image", url, coordinates: boundsToCoords(bounds) });
+    map.addLayer({
+      id: LAYER_ID,
+      type: "raster",
+      source: SOURCE_ID,
+      paint: { "raster-opacity": parseFloat($opacity.value), "raster-fade-duration": 0 },
+    });
+
+    if ($fit.checked) {
+      map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 40 });
+    }
+  }
+
+  map.on("error", e => {
+    if (e.sourceId === SOURCE_ID) $status.textContent = "Failed to load the PNG: " + (e.error?.message || "unknown error");
+  });
+
+  $opacity.addEventListener("input", () => {
+    $opacityVal.textContent = $opacity.value;
+    if (map.getLayer(LAYER_ID)) map.setPaintProperty(LAYER_ID, "raster-opacity", parseFloat($opacity.value));
+  });
+
+  map.on("load", async () => {
+    const files = await listPngs();
+    if (!files.length) {
+      $status.textContent = "No PNGs found. Serve the project root over HTTP or fill MANUAL_FILES.";
+      return;
+    }
+    files.forEach(name => {
+      const li = document.createElement("li");
+      li.textContent = name;
+      li.onclick = () => {
+        document.querySelectorAll("#files li").forEach(x => x.classList.remove("active"));
+        li.classList.add("active");
+        showImage(name);
+      };
+      $files.appendChild(li);
+    });
+    $files.firstChild.click();
+  });
+</script>
+</body>
+</html>
