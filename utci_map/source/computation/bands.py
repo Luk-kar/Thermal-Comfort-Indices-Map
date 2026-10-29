@@ -9,8 +9,8 @@ import calendar
 
 import numpy as np
 
-from .models import YearlyStats
-from .schema import (
+from ..models import YearlyStats
+from ..schema import (
     ABOVE_THRESHOLDS, BELOW_THRESHOLDS, COLD_TOTAL_BAND, HEAT_TOTAL_BAND,
     MAX_BAND_NAMES, MAX_BRACKETS, MIN_BAND_NAMES, MIN_BRACKETS, PEAK_MAX, PEAK_MIN,
 )

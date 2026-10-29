@@ -9,9 +9,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .models import FileRecords, YearlyStats
+from ..models import FileRecords, YearlyStats
 from .netcdf_reader import read_yearly_file, transforms_match
-from .schema import SELECTED_NETCDF_FIELDS
+from ..schema import SELECTED_NETCDF_FIELDS
 
 
 YearRecord = tuple[int, dict[str, np.ndarray]]

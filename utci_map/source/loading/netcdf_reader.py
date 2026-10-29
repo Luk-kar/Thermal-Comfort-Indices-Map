@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import rasterio
 
-from .models import FileRecords, FieldRecords
-from .schema import PEAK_MAX, PEAK_MIN, SELECTED_NETCDF_FIELDS
+from ..models import FileRecords, FieldRecords
+from ..schema import PEAK_MAX, PEAK_MIN, SELECTED_NETCDF_FIELDS
 
 def read_yearly_file(nc_file: Path) -> FileRecords | None:
     """

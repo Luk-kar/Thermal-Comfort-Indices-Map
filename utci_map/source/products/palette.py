@@ -8,7 +8,7 @@ import re
 
 import numpy as np
 
-from .config import MAX_INDEX, NODATA_INDEX
+from ..config import MAX_INDEX, NODATA_INDEX
 
 def hex_to_rgb(color: str) -> tuple[int, int, int]:
 

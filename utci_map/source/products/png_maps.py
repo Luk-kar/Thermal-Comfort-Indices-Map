@@ -10,10 +10,10 @@ from rasterio.crs import CRS
 from rasterio.transform import array_bounds
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 
-from .config import MAX_INDEX, NODATA_INDEX, COLOR_MAP_STEP
+from ..config import MAX_INDEX, NODATA_INDEX, COLOR_MAP_STEP
 from .geotiff import band_indices
 from .palette import palette_rgb, to_indices
-from .schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MIN_BAND_NAMES, MAX_BAND_NAMES
+from ..schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MIN_BAND_NAMES, MAX_BAND_NAMES
 
 WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 
