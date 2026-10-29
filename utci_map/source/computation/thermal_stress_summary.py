@@ -24,23 +24,23 @@ def build_bands(annual: YearlyStats):
 
     Return a list of (name, values, units) tuples.
     """
-    heat_counts, cold_counts = calculate_yearly_category_counts(annual)
+    heat_counts, cold_counts = _calculate_yearly_category_counts(annual)
 
-    bands = build_category_day_bands(heat_counts, cold_counts)
+    bands = _build_category_day_bands(heat_counts, cold_counts)
     bands.extend(
-        build_total_stress_day_bands(annual.years, heat_counts, cold_counts)
+        _build_total_stress_day_bands(annual.years, heat_counts, cold_counts)
     )
-    bands.extend(collect_utci_records(annual))
+    bands.extend(_collect_utci_records(annual))
 
     return bands
     
-def yearly_values(annual: YearlyStats, name: str) -> np.ndarray:
+def _yearly_values(annual: YearlyStats, name: str) -> np.ndarray:
     return annual.cubes[name]
 
 
-def yearly_extremes_to_celsius(annual: YearlyStats):
+def _yearly_extremes_to_celsius(annual: YearlyStats):
 
-    hot, cold = yearly_values(annual, PEAK_MAX), yearly_values(annual, PEAK_MIN)
+    hot, cold = _yearly_values(annual, PEAK_MAX), _yearly_values(annual, PEAK_MIN)
     kelvin_units = {"k", "kelvin", "degrees_k", "degree_k"}
     celsius_units = {"c", "°c", "degc", "celsius", "degree_celsius", "degrees_celsius"}
     units = {annual.peak_units[n].strip().lower() for n in (PEAK_MAX, PEAK_MIN)}
@@ -74,10 +74,10 @@ def yearly_extremes_to_celsius(annual: YearlyStats):
     return (hot - 273.15, cold - 273.15) if is_kelvin else (hot, cold)
 
 
-def yearly_days_by_stress_category(annual, direction, thresholds, stat, brackets):
+def _yearly_days_by_stress_category(annual, direction, thresholds, stat, brackets):
     """Return yearly day counts for each UTCI thermal-stress category."""
 
-    cum = {t: yearly_values(annual, f"utci_days_{direction}_{t}_{stat}") for t in thresholds}
+    cum = {t: _yearly_values(annual, f"utci_days_{direction}_{t}_{stat}") for t in thresholds}
     if direction == "above":
         parts = [cum[26] - cum[32], cum[32] - cum[38], cum[38] - cum[46], cum[46]]
 
@@ -101,7 +101,7 @@ def yearly_days_by_stress_category(annual, direction, thresholds, stat, brackets
     return parts
 
 
-def find_record_value_and_year(values, years, use_max: bool):
+def _find_record_value_and_year(values, years, use_max: bool):
     """Record value per pixel and the first year it occurred."""
 
     if use_max:
@@ -116,19 +116,19 @@ def find_record_value_and_year(values, years, use_max: bool):
     return record, year
 
 
-def calculate_yearly_category_counts(annual: YearlyStats):
+def _calculate_yearly_category_counts(annual: YearlyStats):
     """Calculate yearly day counts for heat- and cold-stress categories."""
-    heat_counts = yearly_days_by_stress_category(
+    heat_counts = _yearly_days_by_stress_category(
         annual, "above", ABOVE_THRESHOLDS, "daily_max", MAX_BRACKETS
     )
-    cold_counts = yearly_days_by_stress_category(
+    cold_counts = _yearly_days_by_stress_category(
         annual, "below", BELOW_THRESHOLDS, "daily_min", MIN_BRACKETS
     )
 
     return heat_counts, cold_counts
 
 
-def build_category_day_bands(heat_counts, cold_counts):
+def _build_category_day_bands(heat_counts, cold_counts):
     """Summarise each stress category using its median yearly day count."""
 
     bands = []
@@ -144,7 +144,7 @@ def build_category_day_bands(heat_counts, cold_counts):
     return bands
 
 
-def build_total_stress_day_bands(years, heat_counts, cold_counts):
+def _build_total_stress_day_bands(years, heat_counts, cold_counts):
     """Validate yearly cold/heat totals and summarise their median day counts."""
 
     days_in_year = np.array(
@@ -168,15 +168,15 @@ def build_total_stress_day_bands(years, heat_counts, cold_counts):
     ]
 
 
-def collect_utci_records(annual: YearlyStats):
+def _collect_utci_records(annual: YearlyStats):
     """Find record maximum and minimum UTCI values and their first years."""
 
-    yearly_maximums, yearly_minimums = yearly_extremes_to_celsius(annual)
+    yearly_maximums, yearly_minimums = _yearly_extremes_to_celsius(annual)
 
-    record_maximum, record_maximum_year = find_record_value_and_year(
+    record_maximum, record_maximum_year = _find_record_value_and_year(
         yearly_maximums, annual.years, use_max=True
     )
-    record_minimum, record_minimum_year = find_record_value_and_year(
+    record_minimum, record_minimum_year = _find_record_value_and_year(
         yearly_minimums, annual.years, use_max=False
     )
 

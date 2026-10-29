@@ -24,7 +24,7 @@ def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
     """
 
     fraction = np.arange(MAX_INDEX + 1) / MAX_INDEX
-    palette = np.array([hex_to_rgb(c) for c in colors], dtype=np.float64)
+    palette = np.array([_hex_to_rgb(c) for c in colors], dtype=np.float64)
 
     if discrete_colors:
         steps = np.minimum((fraction * len(colors)).astype(np.intp), len(colors) - 1)
@@ -34,7 +34,7 @@ def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
         rgb = np.stack([np.interp(fraction, stops, palette[:, c]) for c in range(3)], axis=-1)
     return np.rint(rgb).astype(np.uint8)
     
-def hex_to_rgb(color: str) -> tuple[int, int, int]:
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
 
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
         raise ValueError(f"Invalid colour {color!r}; expected '#rrggbb'")

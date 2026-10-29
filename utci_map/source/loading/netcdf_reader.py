@@ -17,7 +17,7 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
 
     Return None if the file does not contain the yearly peak fields.
     """
-    uris = get_netcdf_field_uris(nc_file)
+    uris = _get_netcdf_field_uris(nc_file)
 
     if not _is_yearly_statistics_file(uris):
         return None
@@ -48,7 +48,7 @@ def _read_selected_fields(
 ) -> FileRecords:
     """Read selected fields and ensure they share the same years and grid."""
     reference_name = SELECTED_NETCDF_FIELDS[0]
-    reference = read_variable(
+    reference = _read_variable(
         uris[reference_name],
         nc_file,
         reference_name,
@@ -61,9 +61,9 @@ def _read_selected_fields(
         peak_units[reference_name] = reference.peak_unit
 
     for name in SELECTED_NETCDF_FIELDS[1:]:
-        field = read_variable(uris[name], nc_file, name)
+        field = _read_variable(uris[name], nc_file, name)
 
-        check_matches_reference(
+        _check_matches_reference(
             field,
             reference,
             nc_file,
@@ -83,7 +83,7 @@ def _read_selected_fields(
         transform=reference.transform,
     )
 
-def get_netcdf_field_uris(nc_file: Path) -> dict[str, str]:
+def _get_netcdf_field_uris(nc_file: Path) -> dict[str, str]:
     """
     Map NetCDF variable name -> GDAL subdataset URI.
 
@@ -103,7 +103,7 @@ def get_netcdf_field_uris(nc_file: Path) -> dict[str, str]:
     return {uri.rsplit(":", 1)[-1].strip('"'): uri for uri in uris}
 
 
-def year_of_time_coordinate(dataset_tags: dict, band_tags: dict) -> int:
+def _year_of_time_coordinate(dataset_tags: dict, band_tags: dict) -> int:
     """
     Convert a NetCDF time step, stored as an offset from a reference date, into its calendar year.
 
@@ -158,7 +158,7 @@ def year_of_time_coordinate(dataset_tags: dict, band_tags: dict) -> int:
     return (origin + timedelta(seconds=offset * SECONDS_PER_UNIT[unit])).year
 
 
-def check_geographic(dataset_tags: dict, nc_file: Path, name: str) -> None:
+def _check_geographic(dataset_tags: dict, nc_file: Path, name: str) -> None:
 
     expected = {"lat#units": "degrees_north", "lon#units": "degrees_east"}
 
@@ -178,7 +178,7 @@ def transforms_match(a, b) -> bool:
     return np.allclose(tuple(a)[:6], tuple(b)[:6], rtol=0.0, atol=1e-9)
 
 
-def read_physical(time_series_raster, band: int, name: str, nc_file: Path) -> np.ndarray:
+def _read_physical(time_series_raster, band: int, name: str, nc_file: Path) -> np.ndarray:
     """
     Read one band, 
     mask missing values and 
@@ -200,7 +200,7 @@ def read_physical(time_series_raster, band: int, name: str, nc_file: Path) -> np
     return values
 
 
-def check_north_up_grid(src, nc_file: Path, name: str) -> None:
+def _check_north_up_grid(src, nc_file: Path, name: str) -> None:
     """
     Reject rotated or south-up grids, 
     which the rest of the pipeline can't handle.
@@ -211,7 +211,7 @@ def check_north_up_grid(src, nc_file: Path, name: str) -> None:
         raise ValueError(f"{nc_file.name}:{name}: grid is not an unrotated north-up raster")
 
 
-def read_peak_unit(src, tags: dict, name: str) -> str:
+def _read_peak_unit(src, tags: dict, name: str) -> str:
     """
     Find the units of a yearly peak variable, or '' 
     if the file doesn't declare any.
@@ -221,7 +221,7 @@ def read_peak_unit(src, tags: dict, name: str) -> str:
     return str(unit)
 
 
-def read_variable(uri: str, nc_file: Path, name: str) -> FieldRecords:
+def _read_variable(uri: str, nc_file: Path, name: str) -> FieldRecords:
     """
     Open one variable, validate its grid and 
     time axis, and read all its time steps.
@@ -229,21 +229,21 @@ def read_variable(uri: str, nc_file: Path, name: str) -> FieldRecords:
 
     with rasterio.open(uri) as src:
         tags = src.tags()
-        check_geographic(tags, nc_file, name)
-        check_north_up_grid(src, nc_file, name)
+        _check_geographic(tags, nc_file, name)
+        _check_north_up_grid(src, nc_file, name)
         if not src.indexes:
             raise ValueError(f"{nc_file.name}:{name}: no time steps")
 
         return FieldRecords(
-            years=[year_of_time_coordinate(tags, src.tags(b)) for b in src.indexes],
-            arrays=[read_physical(src, b, name, nc_file) for b in src.indexes],
+            years=[_year_of_time_coordinate(tags, src.tags(b)) for b in src.indexes],
+            arrays=[_read_physical(src, b, name, nc_file) for b in src.indexes],
             shape=src.shape,
             transform=src.transform,
-            peak_unit=read_peak_unit(src, tags, name) if name in (PEAK_MAX, PEAK_MIN) else None,
+            peak_unit=_read_peak_unit(src, tags, name) if name in (PEAK_MAX, PEAK_MIN) else None,
         )
 
 
-def check_matches_reference(
+def _check_matches_reference(
     variable: FieldRecords, reference: FieldRecords,
     nc_file: Path, name: str, reference_name: str,
 ) -> None:

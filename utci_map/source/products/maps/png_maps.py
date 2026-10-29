@@ -41,12 +41,12 @@ def render_pngs(
         heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
         crs, transform, bounds = src.crs, src.transform, src.bounds
 
-    render_map(cold_days, crs, transform, bounds, cold_colors,
+    _render_map(cold_days, crs, transform, bounds, cold_colors,
                cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors)
-    render_map(heat_days, crs, transform, bounds, heat_colors,
+    _render_map(heat_days, crs, transform, bounds, heat_colors,
                heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors)
                
-def reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bounds):
+def _reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bounds):
     """Resample a geographic grid onto EPSG:3857 pixels (nearest-neighbour).
 
     Returns the reprojected array and its true (west, south, east, north) edges
@@ -69,7 +69,7 @@ def reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bou
     return destination, lonlat_bounds
 
 
-def write_map(
+def _write_map(
     values, lonlat_bounds, colors, png_path: Path, json_path: Path,
     column: str, units: str, vmin: float, vmax: float, raw_min: float, raw_max: float,
     png_scale: int = 1, discrete_colors: bool = False,
@@ -108,7 +108,7 @@ def write_map(
 
 
 
-def render_map(
+def _render_map(
     total, crs, transform, bounds, colors, png_path: Path, json_path: Path, column: str, units: str,
     png_scale: int = 1, discrete_colors: bool = False,
 ) -> None:
@@ -126,11 +126,11 @@ def render_map(
         print(f"  All pixels equal ({vmin:.1f}); the whole map will be the lightest colour.")
         vmax = vmin + 1.0
 
-    projected, lonlat_bounds = reproject_to_webmercator(total, crs, transform, bounds)
+    projected, lonlat_bounds = _reproject_to_webmercator(total, crs, transform, bounds)
     if not np.isfinite(projected).any():
         raise ValueError(f"Reprojection left no valid pixels for {png_path.name}")
 
-    write_map(
+    _write_map(
         projected, lonlat_bounds, colors, png_path, json_path,
         column, units, vmin, vmax, raw_min, raw_max,
         png_scale=png_scale, discrete_colors=discrete_colors,
