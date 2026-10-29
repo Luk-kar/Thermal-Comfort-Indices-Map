@@ -1,10 +1,10 @@
 """Run from the project root with: python -m utci_map."""
 
-from .source import config
-from .source.computation.thermal_stress_summary import build_bands
-from .source.products.geotiff import write_geotiff
-from .source.products.maps.png_maps import render_pngs
-from .source.loading.combine_yearly_utci_statistics import load_yearly_statistics
+from utci_map.source import config
+from utci_map.source.computation.thermal_stress_summary import build_bands
+from utci_map.source.products.geotiff import write_geotiff
+from utci_map.source.products.maps.png_maps import render_pngs
+from utci_map.source.loading.combine_yearly_utci_statistics import load_yearly_statistics
 
 
 def main():

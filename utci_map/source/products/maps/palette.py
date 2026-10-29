@@ -8,7 +8,7 @@ import re
 
 import numpy as np
 
-from ...config import MAX_INDEX, NODATA_INDEX
+from utci_map.source.config import MAX_INDEX, NODATA_INDEX
 
 def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
     """

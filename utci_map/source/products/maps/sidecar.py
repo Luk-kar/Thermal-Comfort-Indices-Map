@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ...config import MAX_INDEX, NODATA_INDEX, COLOR_MAP_STEP
+from utci_map.source.config import MAX_INDEX, NODATA_INDEX, COLOR_MAP_STEP
 
 
 def write_sidecar(
