@@ -20,6 +20,32 @@ WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 
 WGS84_CRS: CRS = CRS.from_epsg(4326)
 
+def render_pngs(
+    tif_path: Path,
+    cold_png_path: Path, cold_json_path: Path,
+    heat_png_path: Path, heat_json_path: Path,
+    cold_colors: list[str], heat_colors: list[str],
+    png_scale: int = 1, discrete_colors: bool = False,
+):
+
+    with rasterio.open(tif_path) as src:
+
+        index = band_indices(
+            src, MIN_BAND_NAMES + MAX_BAND_NAMES + [COLD_TOTAL_BAND, HEAT_TOTAL_BAND]
+        )
+
+        if src.crs is None:
+            raise ValueError(f"{tif_path} has no CRS")
+
+        cold_days = src.read(index[COLD_TOTAL_BAND]).astype(np.float64)
+        heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
+        crs, transform, bounds = src.crs, src.transform, src.bounds
+
+    render_map(cold_days, crs, transform, bounds, cold_colors,
+               cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors)
+    render_map(heat_days, crs, transform, bounds, heat_colors,
+               heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors)
+               
 def reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bounds):
     """Resample a geographic grid onto EPSG:3857 pixels (nearest-neighbour).
 
@@ -109,31 +135,4 @@ def render_map(
         column, units, vmin, vmax, raw_min, raw_max,
         png_scale=png_scale, discrete_colors=discrete_colors,
     )
-
-
-def render_pngs(
-    tif_path: Path,
-    cold_png_path: Path, cold_json_path: Path,
-    heat_png_path: Path, heat_json_path: Path,
-    cold_colors: list[str], heat_colors: list[str],
-    png_scale: int = 1, discrete_colors: bool = False,
-):
-
-    with rasterio.open(tif_path) as src:
-
-        index = band_indices(
-            src, MIN_BAND_NAMES + MAX_BAND_NAMES + [COLD_TOTAL_BAND, HEAT_TOTAL_BAND]
-        )
-
-        if src.crs is None:
-            raise ValueError(f"{tif_path} has no CRS")
-
-        cold_days = src.read(index[COLD_TOTAL_BAND]).astype(np.float64)
-        heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
-        crs, transform, bounds = src.crs, src.transform, src.bounds
-
-    render_map(cold_days, crs, transform, bounds, cold_colors,
-               cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors)
-    render_map(heat_days, crs, transform, bounds, heat_colors,
-               heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors)
 

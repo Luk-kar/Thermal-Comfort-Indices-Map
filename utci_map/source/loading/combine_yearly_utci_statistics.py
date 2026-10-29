@@ -16,7 +16,31 @@ from ..schema import SELECTED_NETCDF_FIELDS
 
 YearRecord = tuple[int, dict[str, np.ndarray]]
 
+def load_yearly_statistics(
+    data_dir: Path,
+    start_year: int,
+    end_year: int,
+    require_complete_period: bool,
+) -> YearlyStats:
+    """Load consistent yearly UTCI statistics for the selected period."""
 
+    records, reference = _collect_yearly_records(data_dir)
+
+    selected_records = _select_period_records(
+        records,
+        start_year,
+        end_year,
+    )
+
+    _validate_period_years(
+        selected_records,
+        start_year,
+        end_year,
+        require_complete_period,
+    )
+
+    return _assemble_yearly_statistics(selected_records, reference)
+    
 def _check_file_consistency(
     loaded: FileRecords,
     reference: FileRecords,
@@ -144,29 +168,3 @@ def _assemble_yearly_statistics(
         shape=reference.shape,
         transform=reference.transform,
     )
-
-
-def load_yearly_statistics(
-    data_dir: Path,
-    start_year: int,
-    end_year: int,
-    require_complete_period: bool,
-) -> YearlyStats:
-    """Load consistent yearly UTCI statistics for the selected period."""
-
-    records, reference = _collect_yearly_records(data_dir)
-
-    selected_records = _select_period_records(
-        records,
-        start_year,
-        end_year,
-    )
-
-    _validate_period_years(
-        selected_records,
-        start_year,
-        end_year,
-        require_complete_period,
-    )
-
-    return _assemble_yearly_statistics(selected_records, reference)

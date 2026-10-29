@@ -10,13 +10,6 @@ import numpy as np
 
 from ...config import MAX_INDEX, NODATA_INDEX
 
-def hex_to_rgb(color: str) -> tuple[int, int, int]:
-
-    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
-        raise ValueError(f"Invalid colour {color!r}; expected '#rrggbb'")
-    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-
-
 def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
     """
     Return an RGB colour for each map palette index from 0 to MAX_INDEX.
@@ -40,7 +33,12 @@ def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
         stops = np.linspace(0.0, 1.0, len(colors))
         rgb = np.stack([np.interp(fraction, stops, palette[:, c]) for c in range(3)], axis=-1)
     return np.rint(rgb).astype(np.uint8)
+    
+def hex_to_rgb(color: str) -> tuple[int, int, int]:
 
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        raise ValueError(f"Invalid colour {color!r}; expected '#rrggbb'")
+    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
 
 def to_indices(values: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
     """

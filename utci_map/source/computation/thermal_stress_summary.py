@@ -15,6 +15,25 @@ from ..schema import (
     MAX_BAND_NAMES, MAX_BRACKETS, MIN_BAND_NAMES, MIN_BRACKETS, PEAK_MAX, PEAK_MIN,
 )
 
+def build_bands(annual: YearlyStats):
+    """Summarise yearly UTCI statistics into bands for the output GeoTIFF.
+
+    Include median yearly day counts for each thermal-stress category,
+    median yearly totals of cold and heat days, and record maximum and
+    minimum UTCI values in Celsius with the first years they occurred.
+
+    Return a list of (name, values, units) tuples.
+    """
+    heat_counts, cold_counts = calculate_yearly_category_counts(annual)
+
+    bands = build_category_day_bands(heat_counts, cold_counts)
+    bands.extend(
+        build_total_stress_day_bands(annual.years, heat_counts, cold_counts)
+    )
+    bands.extend(collect_utci_records(annual))
+
+    return bands
+    
 def yearly_values(annual: YearlyStats, name: str) -> np.ndarray:
     return annual.cubes[name]
 
@@ -167,23 +186,3 @@ def collect_utci_records(annual: YearlyStats):
         ("record_min_utci_c", record_minimum, "degC"),
         ("record_min_utci_year", record_minimum_year, "year"),
     ]
-
-
-def build_bands(annual: YearlyStats):
-    """Summarise yearly UTCI statistics into bands for the output GeoTIFF.
-
-    Include median yearly day counts for each thermal-stress category,
-    median yearly totals of cold and heat days, and record maximum and
-    minimum UTCI values in Celsius with the first years they occurred.
-
-    Return a list of (name, values, units) tuples.
-    """
-    heat_counts, cold_counts = calculate_yearly_category_counts(annual)
-
-    bands = build_category_day_bands(heat_counts, cold_counts)
-    bands.extend(
-        build_total_stress_day_bands(annual.years, heat_counts, cold_counts)
-    )
-    bands.extend(collect_utci_records(annual))
-
-    return bands
