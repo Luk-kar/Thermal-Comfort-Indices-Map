@@ -68,7 +68,7 @@ MIN_BRACKETS = [(-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9)]
 MAX_BAND_NAMES = [f"days_daily_max_{fmt(lo)}_{fmt(hi)}" for lo, hi in MAX_BRACKETS]
 MIN_BAND_NAMES = [f"days_daily_min_{fmt(lo)}_{fmt(hi)}" for lo, hi in MIN_BRACKETS]
 
-REQUIRED_VARIABLES = (
+SELECTED_FIELDS = (
     [PEAK_MAX, PEAK_MIN]
     + [f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS]
     + [f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS]
@@ -160,7 +160,7 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     uris = subdataset_uris(nc_file)
     if PEAK_MAX not in uris or PEAK_MIN not in uris:
         return None
-    missing = [v for v in REQUIRED_VARIABLES if v not in uris]
+    missing = [v for v in SELECTED_FIELDS if v not in uris]
     if missing:
         raise KeyError(f"{nc_file.name} lacks variables: {missing}")
 
@@ -169,7 +169,7 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     arrays: dict[str, list[np.ndarray]] = {}
     peak_units: dict[str, str] = {}
 
-    for name in REQUIRED_VARIABLES:
+    for name in SELECTED_FIELDS:
         with rasterio.open(uris[name]) as src:
             tags = src.tags()
             check_geographic(tags, nc_file, name)
@@ -185,9 +185,9 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
                 years, shape, transform = band_years, src.shape, src.transform
             else:
                 if band_years != years:
-                    raise ValueError(f"{nc_file.name}:{name}: time axis differs from {REQUIRED_VARIABLES[0]}")
+                    raise ValueError(f"{nc_file.name}:{name}: time axis differs from {SELECTED_FIELDS[0]}")
                 if src.shape != shape or not transforms_match(src.transform, transform):
-                    raise ValueError(f"{nc_file.name}:{name}: grid differs from {REQUIRED_VARIABLES[0]}")
+                    raise ValueError(f"{nc_file.name}:{name}: grid differs from {SELECTED_FIELDS[0]}")
 
             arrays[name] = [read_physical(src, b, name, nc_file) for b in src.indexes]
 
@@ -218,7 +218,7 @@ def load_yearly_statistics() -> YearlyStats:
                 raise ValueError(f"{nc_file.name}: peak units {loaded.peak_units} differ from {peak_units}")
 
         for position, year in enumerate(loaded.years):
-            records.append((year, {n: loaded.arrays[n][position] for n in REQUIRED_VARIABLES}))
+            records.append((year, {n: loaded.arrays[n][position] for n in SELECTED_FIELDS}))
 
     if not records:
         raise FileNotFoundError(f"No yearly-statistics files in {DATA_DIR.resolve()}")
@@ -238,7 +238,7 @@ def load_yearly_statistics() -> YearlyStats:
         print(f"WARNING: missing years {missing_years}; using {years.size} years")
 
     records.sort(key=lambda r: r[0])
-    cubes = {n: np.stack([r[1][n] for r in records]) for n in REQUIRED_VARIABLES}
+    cubes = {n: np.stack([r[1][n] for r in records]) for n in SELECTED_FIELDS}
     return YearlyStats(
         years=np.array([r[0] for r in records], dtype=int),
         cubes=cubes, peak_units=peak_units, shape=grid[0], transform=grid[1],
