@@ -21,7 +21,7 @@ export function initializeSidebar({ onSelectImage, onOpacityChange }) {
     files.replaceChildren();
 
     if (!names.length) {
-      setStatus("No PNGs found. Serve the project root over HTTP or fill MANUAL_FILES.");
+      setStatus("No PNGs configured. Check REGIONS and PNG_FILES.");
       return;
     }
 

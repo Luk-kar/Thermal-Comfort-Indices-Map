@@ -6,6 +6,7 @@ import { createPngOverlay } from "../map/png-overlay.js";
 import { formatBandValue, buildPointContent } from "../popup/content.js";
 import { attachPointPopup } from "../popup/controller.js";
 import { initializeSidebar } from "../ui/sidebar.js";
+import { createRegionalRepository } from "../data/regional-files.js";
 
 class Element {
   constructor(tag = "div") {
@@ -40,7 +41,7 @@ class MockMap {
   constructor() { this.handlers = {}; this.sources = {}; this.layers = {}; this.paint = []; }
   on(event, handler) { (this.handlers[event] ||= []).push(handler); }
   off(event, handler) { this.handlers[event] = this.handlers[event].filter(item => item !== handler); }
-  addControl() {}
+  addControl() { }
   getLayer(id) { return this.layers[id]; }
   getSource(id) { return this.sources[id]; }
   removeLayer(id) { delete this.layers[id]; }
@@ -242,16 +243,108 @@ test("thin entry starts the application and registers each handler once", async 
   let createdMap;
   globalThis.maplibregl = {
     Map: class extends MockMap { constructor() { super(); createdMap = this; } },
-    Popup: MockPopup, NavigationControl: class {}, ScaleControl: class {},
+    Popup: MockPopup, NavigationControl: class { }, ScaleControl: class { },
   };
   globalThis.GeoTIFF = { fromUrl: async () => ({ getImage: async () => makeImage() }) };
-  globalThis.fetch = async () => { throw new Error("No directory listing"); };
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      coordinates: [
+        [0, 4],
+        [4, 4],
+        [4, 0],
+        [0, 0],
+      ],
+    }),
+  });
   await import("../index.js");
   assert.equal(createdMap.handlers.load.length, 1);
   assert.equal(createdMap.handlers.click.length, 1);
   assert.equal(createdMap.handlers.error.length, 1);
   await createdMap.handlers.load[0]();
-  assert.match(elements.status.textContent, /No PNGs/);
+  assert.equal(elements.files.children.length, 16);
+  assert.equal(
+    elements.files.children[0].textContent,
+    "azores/utci_cold_days.png",
+  );
+
+  // setFiles() starts selection asynchronously; explicitly await a selection
+  // before testing the point popup.
+  await elements.files.children[0].click();
+
+  assert.equal(elements.status.textContent, "");
   await createdMap.handlers.click[0]({ lngLat: { lng: 1.25, lat: 2.75 } });
   assert.ok(popups.at(-1).content);
+});
+
+test("regional placement derives bounds from a coordinates-only sidecar", async () => {
+  const urls = [];
+
+  const repository = createRegionalRepository(
+    {
+      outputDir: "../output/map/",
+      regions: ["azores"],
+      pngFiles: ["utci_cold_days.png"],
+      summaryTifName: "utci_summary.tif",
+      geoTIFF: {},
+    },
+    async url => {
+      urls.push(url);
+
+      return {
+        ok: true,
+        json: async () => ({
+          coordinates: [
+            [0, 4],
+            [4, 4],
+            [4, 0],
+            [0, 0],
+          ],
+        }),
+      };
+    },
+  );
+
+  assert.deepEqual(await repository.listPngs(), [
+    "azores/utci_cold_days.png",
+  ]);
+
+  assert.deepEqual(
+    await repository.getPlacement("azores/utci_cold_days.png"),
+    {
+      url: "../output/map/azores/utci_cold_days.png",
+      bounds: [0, 0, 4, 4],
+      coordinates: [
+        [0, 4],
+        [4, 4],
+        [4, 0],
+        [0, 0],
+      ],
+    },
+  );
+
+  assert.deepEqual(urls, [
+    "../output/map/azores/utci_cold_days.json",
+  ]);
+});
+
+test("regional placement rejects missing sidecar placement explicitly", async () => {
+  const repository = createRegionalRepository(
+    {
+      outputDir: "../output/map/",
+      regions: ["azores"],
+      pngFiles: ["utci_cold_days.png"],
+      summaryTifName: "utci_summary.tif",
+      geoTIFF: {},
+    },
+    async () => ({
+      ok: true,
+      json: async () => ({}),
+    }),
+  );
+
+  await assert.rejects(
+    repository.getPlacement("azores/utci_cold_days.png"),
+    /Missing or invalid placement.*azores\/utci_cold_days\.json/,
+  );
 });

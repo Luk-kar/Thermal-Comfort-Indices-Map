@@ -309,3 +309,54 @@ def test_invalid_input_raises(map_input, render_options, case):
 
     with pytest.raises(error):
         render_pngs(path, **render_options, **options)
+
+@pytest.mark.parametrize("epsg", [4326, 3857])
+def test_land_mask_keeps_intersecting_pixels_without_land_at_centres(epsg):
+    """
+    Keep narrow land features on geographic and projected grids.
+
+    The polygon intersects both pixels in the first column, but contains
+    neither pixel centre. Pixels in the second column remain sea.
+    """
+    from rasterio.crs import CRS
+    from rasterio.transform import from_bounds
+    from rasterio.warp import transform_bounds
+
+    from utci_map.source.products.maps.png_maps import (
+        RasterGrid,
+        WGS84_CRS,
+        _land_mask,
+    )
+
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [[
+            [0.05, 0.1],
+            [0.15, 0.1],
+            [0.15, 1.9],
+            [0.05, 1.9],
+            [0.05, 0.1],
+        ]],
+    }
+
+    crs = CRS.from_epsg(epsg)
+    bounds = (0.0, 0.0, 2.0, 2.0)
+
+    if crs != WGS84_CRS:
+        bounds = transform_bounds(WGS84_CRS, crs, *bounds)
+
+    grid = RasterGrid(
+        crs=crs,
+        grid_transform=from_bounds(*bounds, width=2, height=2),
+        bounds=bounds,
+    )
+
+    mask = _land_mask([geometry], (2, 2), grid)
+
+    np.testing.assert_array_equal(
+        mask,
+        np.array([
+            [True, False],
+            [True, False],
+        ]),
+    )

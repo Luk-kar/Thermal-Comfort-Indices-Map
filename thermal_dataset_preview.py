@@ -1,14 +1,25 @@
 """Build the UTCI extreme-day summary GeoTIFF, plain PNG maps and MapLibre sidecars."""
 
-from __future__ import annotations
+import sys
+import traceback
+from contextlib import redirect_stdout, redirect_stderr
 
 import calendar
 import json
 import math
 import re
+import shutil
+from tempfile import TemporaryDirectory
+from zipfile import ZipFile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from thermal_dataset_download import (
+    OUTPUT_DIR as DOWNLOAD_DIR,
+    START_YEAR,
+    END_YEAR,
+)
 
 import numpy as np
 import rasterio
@@ -23,17 +34,10 @@ WGS84_CRS: CRS = CRS.from_epsg(4326)
 COLD_TOTAL_BAND = "days_daily_min_below_9_total"
 HEAT_TOTAL_BAND = "days_daily_max_above_26_total"
 
-DATA_DIR = Path("utci_iceland_sample")
-START_YEAR = 2016
-END_YEAR = 2025
 REQUIRE_COMPLETE_PERIOD = True
 
-OUTPUT_DIR = Path("output")
-TIF_PATH = OUTPUT_DIR / "utci_summary.tif"
-COLD_PNG_PATH = OUTPUT_DIR / "utci_cold_days.png"
-HEAT_PNG_PATH = OUTPUT_DIR / "utci_heat_days.png"
-COLD_JSON_PATH = OUTPUT_DIR / "utci_cold_days.json"
-HEAT_JSON_PATH = OUTPUT_DIR / "utci_heat_days.json"
+OUTPUT_DIR = DOWNLOAD_DIR.parent / "output" / "preview"
+LOG_PATH = OUTPUT_DIR / "thermal_dataset_preview.log"
 
 COLD_COLORS = ["#daccc9", "#b8d4c8", "#72b6b5", "#4792b1", "#0f588f", "#042b48"]
 HEAT_COLORS = ["#daccc9", "#fdbe9d", "#ef8a82", "#c8596c", "#993233"]
@@ -198,12 +202,12 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     return FileRecords(years, arrays, peak_units, shape, transform)
 
 
-def load_yearly_statistics() -> YearlyStats:
+def load_yearly_statistics(data_dir: Path) -> YearlyStats:
     records: list[tuple[int, dict[str, np.ndarray]]] = []
     grid = None
     peak_units: dict[str, str] | None = None
 
-    for nc_file in sorted(DATA_DIR.glob("*.nc")):
+    for nc_file in sorted(data_dir.glob("*.nc")):
         loaded = read_yearly_file(nc_file)
         if loaded is None:
             continue
@@ -221,7 +225,7 @@ def load_yearly_statistics() -> YearlyStats:
             records.append((year, {n: loaded.arrays[n][position] for n in SELECTED_FIELDS}))
 
     if not records:
-        raise FileNotFoundError(f"No yearly-statistics files in {DATA_DIR.resolve()}")
+        raise FileNotFoundError(f"No yearly-statistics files in {data_dir.resolve()}")
 
     records = [r for r in records if START_YEAR <= r[0] <= END_YEAR]
     years = np.array([r[0] for r in records], dtype=int)
@@ -500,7 +504,12 @@ def render_map(
     )
 
 
-def render_pngs(tif_path: Path):
+def render_pngs(tif_path: Path, output_dir: Path):
+    COLD_PNG_PATH = output_dir / "utci_cold_days.png"
+    HEAT_PNG_PATH = output_dir / "utci_heat_days.png"
+    COLD_JSON_PATH = output_dir / "utci_cold_days.json"
+    HEAT_JSON_PATH = output_dir / "utci_heat_days.json"
+
     with rasterio.open(tif_path) as src:
         index = {desc: i for i, desc in enumerate(src.descriptions, start=1)}
         missing = [n for n in MIN_BAND_NAMES + MAX_BAND_NAMES if n not in index]
@@ -521,18 +530,87 @@ def render_pngs(tif_path: Path):
                HEAT_PNG_PATH, HEAT_JSON_PATH, HEAT_TOTAL_BAND, "days")
 
 
-def main():
-    annual = load_yearly_statistics()
-    print(f"Years used ({annual.years.size}): {annual.years.tolist()}")
-    print(f"Grid: {annual.shape[0]} x {annual.shape[1]} pixels")
+def extract_netcdf_files(archive_path: Path, destination: Path) -> list[Path]:
+    """Extract NetCDF members using generated, collision-free filenames."""
+    destination.mkdir(parents=True, exist_ok=True)
+    extracted = []
+    with ZipFile(archive_path) as archive:
+        members = sorted(
+            (member for member in archive.infolist()
+             if not member.is_dir()
+             and Path(member.filename).suffix.lower() == ".nc"),
+            key=lambda member: member.filename,
+        )
+        if not members:
+            raise FileNotFoundError(f"No NetCDF (.nc) files in {archive_path}")
+        for index, member in enumerate(members, start=1):
+            target = destination / f"part_{index:05d}.nc"
+            print(f"Extracting {archive_path.name}: {member.filename}", flush=True)
+            with archive.open(member) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            extracted.append(target)
+    return extracted
 
+
+def preview_archive(archive_path: Path, output_dir: Path) -> Path:
+    """Build a separate summary and previews for one region archive."""
+    region_output_dir = output_dir / archive_path.stem
+    tif_path = region_output_dir / "utci_summary.tif"
+    with TemporaryDirectory(prefix=f"{archive_path.stem}_") as temp_dir:
+        data_dir = Path(temp_dir)
+        extract_netcdf_files(archive_path, data_dir)
+        annual = load_yearly_statistics(data_dir)
+
+    print(f"Years used ({annual.years.size}): {annual.years.tolist()}", flush=True)
+    print(f"Grid: {annual.shape[0]} x {annual.shape[1]} pixels", flush=True)
     bands = build_bands(annual)
-    write_geotiff(TIF_PATH, bands, annual.transform)
-    print(f"Wrote {TIF_PATH} ({len(bands)} bands)")
+    write_geotiff(tif_path, bands, annual.transform)
+    print(f"Wrote {tif_path} ({len(bands)} bands)", flush=True)
+    render_pngs(tif_path, region_output_dir)
+    print(f"Finished {archive_path.name}: {region_output_dir}", flush=True)
+    return region_output_dir
 
-    render_pngs(TIF_PATH)
-    print(f"Wrote {COLD_PNG_PATH} + {COLD_JSON_PATH} and {HEAT_PNG_PATH} + {HEAT_JSON_PATH}")
+
+def main() -> None:
+    pattern = f"utci_*_{START_YEAR}_{END_YEAR}.zip"
+    archives = [
+        path for path in sorted(DOWNLOAD_DIR.glob(pattern))
+    ]
+
+    if not archives:
+        raise FileNotFoundError(
+            f"No non-Iceland archives matching {pattern!r} in {DOWNLOAD_DIR.resolve()}"
+        )
+    for index, archive_path in enumerate(archives, start=1):
+        print(
+            f"\nPreviewing {index}/{len(archives)}: {archive_path.name}",
+            flush=True,
+        )
+        preview_archive(archive_path, OUTPUT_DIR)
+
+
+def run_with_log() -> int:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    with LOG_PATH.open("a", encoding="utf-8", buffering=1) as log_file:
+        with redirect_stdout(log_file), redirect_stderr(log_file):
+            started = datetime.now(timezone.utc).isoformat()
+            print(f"\n=== Preview started: {started} ===", flush=True)
+
+            try:
+                main()
+            except KeyboardInterrupt:
+                print("Preview interrupted by user.", flush=True)
+                return 130
+            except Exception:
+                traceback.print_exc()
+                print("Preview failed.", flush=True)
+                return 1
+
+            finished = datetime.now(timezone.utc).isoformat()
+            print(f"=== Preview finished: {finished} ===", flush=True)
+            return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_with_log())

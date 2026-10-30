@@ -15,10 +15,18 @@ export function attachPointPopup(map, { summaryReader, buildContent, maplibre })
 
     try {
 
-      const point = await summaryReader.readPoint(event.lngLat.lng, event.lngLat.lat);
+      const point = await summaryReader.readPoint(
+        event.lngLat.lng,
+        event.lngLat.lat,
+      );
+
       if (!isCurrent()) return;
+
       if (!point) {
-        popup.setText("This point is outside the summary GeoTIFF extent.");
+        popup.setText(
+          "No point data available. Select a regional PNG and click within " +
+          "its summary GeoTIFF extent. If the selection just changed, click again.",
+        );
         return;
       }
 

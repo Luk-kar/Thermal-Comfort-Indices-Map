@@ -32,13 +32,16 @@
 <body>
 <div id="app">
   <div id="sidebar">
-    <h3>PNG files in <code>output/</code></h3>
+    <h3>PNG files in <code>output/map/</code></h3>
     <ul id="files"></ul>
     <label>Opacity: <span id="opacityVal">0.8</span>
       <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.8" />
     </label>
     <label><input id="fit" type="checkbox" checked /> Fit map to image on select</label>
-    <p style="font-size:12px">Click the map to inspect all summary GeoTIFF bands.</p>
+    <p style="font-size:12px">
+      Select a regional PNG, then click the map to inspect that region's
+      summary GeoTIFF bands.
+    </p>
     <div id="status"></div>
   </div>
   <div id="map"></div>

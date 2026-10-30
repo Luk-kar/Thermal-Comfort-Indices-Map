@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-DATA_DIR = Path("utci_iceland_sample")
+DATA_DIR = Path("downloads")
 
 
 START_YEAR = 2016
@@ -14,7 +14,7 @@ END_YEAR = 2025
 REQUIRE_COMPLETE_PERIOD = True
 
 
-OUTPUT_DIR = Path("output")
+OUTPUT_DIR = Path("output") / "map"
 
 
 TIF_PATH = OUTPUT_DIR / "utci_summary.tif"

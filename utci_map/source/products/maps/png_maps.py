@@ -192,7 +192,7 @@ def _land_mask(
         out_shape=raster_shape,
         transform=grid.grid_transform,
         invert=True,
-        all_touched=False,
+        all_touched=True,
     )
 
 
