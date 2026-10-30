@@ -142,13 +142,18 @@ def test_coastline_masks_sea_and_excludes_it_from_range(map_input, render_option
 
 
 def test_land_mask_preserves_holes():
-    from utci_map.source.products.maps.png_maps import _land_mask, WGS84_CRS
+    from utci_map.source.products.maps.png_maps import _land_mask, RasterGrid, WGS84_CRS
 
     geometry = {"type": "Polygon", "coordinates": [
         [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]],
         [[1, 1], [1, 3], [3, 3], [3, 1], [1, 1]],
     ]}
-    mask = _land_mask([geometry], (4, 4), from_origin(0, 4, 1, 1), WGS84_CRS)
+    grid = RasterGrid(
+        crs=WGS84_CRS,
+        grid_transform=from_origin(0, 4, 1, 1),
+        bounds=(0, 0, 4, 4),
+    )
+    mask = _land_mask([geometry], (4, 4), grid)
     expected = np.ones((4, 4), dtype=bool)
     expected[1:3, 1:3] = False
     np.testing.assert_array_equal(mask, expected)
@@ -158,16 +163,19 @@ def test_land_mask_reprojects_polygons():
     from rasterio.transform import from_bounds
     from rasterio.warp import transform_bounds
     from utci_map.source.products.maps.png_maps import (
-        _land_mask, WGS84_CRS, WEBMERCATOR_CRS,
+        _land_mask, RasterGrid, WGS84_CRS, WEBMERCATOR_CRS,
     )
 
     geometry = {"type": "Polygon", "coordinates": [[
         [0, 0], [1, 0], [1, 2], [0, 2], [0, 0],
     ]]}
     bounds = transform_bounds(WGS84_CRS, WEBMERCATOR_CRS, 0, 0, 2, 2)
-    mask = _land_mask(
-        [geometry], (4, 4), from_bounds(*bounds, 4, 4), WEBMERCATOR_CRS,
+    grid = RasterGrid(
+        crs=WEBMERCATOR_CRS,
+        grid_transform=from_bounds(*bounds, 4, 4),
+        bounds=bounds,
     )
+    mask = _land_mask([geometry], (4, 4), grid)
     expected = np.zeros((4, 4), dtype=bool)
     expected[:, :2] = True
     np.testing.assert_array_equal(mask, expected)

@@ -10,7 +10,7 @@ import rasterio
 from PIL import Image
 from rasterio.crs import CRS
 from rasterio.features import geometry_mask
-from rasterio.transform import array_bounds
+from rasterio.transform import Affine, array_bounds
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds, transform_geom
 
 from utci_map.source.config import MAX_INDEX, NODATA_INDEX, COASTLINE_PATH
@@ -23,6 +23,64 @@ WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 
 
 WGS84_CRS: CRS = CRS.from_epsg(4326)
+
+
+@dataclass(frozen=True)
+class RasterGrid:
+    """
+    Describe how a raster grid relates to its coordinate reference system.
+
+    Attributes:
+        crs: Coordinate reference system used by the transform and bounds.
+        grid_transform: Affine transform mapping pixel coordinates
+            (column, row) to spatial coordinates (x, y) in this CRS.
+            Encodes the grid origin, pixel size, and any rotation or shear.
+        bounds: Bounding box enclosing the entire raster, expressed as
+            (west, south, east, north) in this CRS, not necessarily in
+            longitude and latitude.
+
+    The transform locates individual pixels; the bounds describe the
+    overall area covered by the raster.
+    """
+
+    crs: CRS
+    grid_transform: Affine
+    bounds: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, eq=False)
+class MapLayer:
+    """
+    Group a raster's values, spatial grid, and metric metadata.
+
+    Attributes:
+        values: Two-dimensional array with shape (height, width).
+            Each element contains the metric value for one pixel;
+            NaN marks missing or masked pixels, including excluded sea
+            pixels when coastline masking is enabled.
+        grid: Spatial metadata describing the array's coordinate reference
+            system, pixel-to-coordinate mapping, and overall bounds.
+            Must describe the same raster extent and pixel layout as values.
+        metric_band_name: Name of the source GeoTIFF band represented by
+            the array, such as "days_daily_min_below_9_total".
+            Written to the JSON sidecar's metric.column field.
+        metric_units: Units of the array values, such as "days".
+            Written to the JSON sidecar's metric.units field.
+
+    This class describes what is rendered. 
+    Output paths and colours belong to MapOutput; 
+    shared rendering settings belong to RenderOptions.
+
+    Field reassignment is blocked, 
+    but the values array is not copied or made read-only. 
+    Its elements can still be modified in place, and those
+    changes are visible to other objects sharing the same array.
+    """
+
+    values: np.ndarray
+    grid: RasterGrid
+    metric_band_name: str
+    metric_units: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -65,24 +123,35 @@ def render_pngs(
 
         cold_days = src.read(index[COLD_TOTAL_BAND]).astype(np.float64)
         heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
-        crs, transform, bounds = src.crs, src.transform, src.bounds
+        grid = RasterGrid(
+            crs=src.crs,
+            grid_transform=src.transform,
+            bounds=tuple(src.bounds),
+        )
 
     land_geometries = None
     if options.coastline_path is not None:
 
         land_geometries = _load_land_geometries(options.coastline_path)
-        land = _land_mask(land_geometries, cold_days.shape, transform, crs)
+        land = _land_mask(land_geometries, cold_days.shape, grid)
         cold_days[~land] = np.nan
         heat_days[~land] = np.nan
 
-    _render_map(
-        cold_days, crs, transform, bounds, cold, COLD_TOTAL_BAND, "days",
-        options=options, land_geometries=land_geometries,
+    cold_layer = MapLayer(
+        values=cold_days,
+        grid=grid,
+        metric_band_name=COLD_TOTAL_BAND,
+        metric_units="days",
     )
-    _render_map(
-        heat_days, crs, transform, bounds, heat, HEAT_TOTAL_BAND, "days",
-        options=options, land_geometries=land_geometries,
+    heat_layer = MapLayer(
+        values=heat_days,
+        grid=grid,
+        metric_band_name=HEAT_TOTAL_BAND,
+        metric_units="days",
     )
+
+    _render_map(cold_layer, cold, options, land_geometries=land_geometries)
+    _render_map(heat_layer, heat, options, land_geometries=land_geometries)
 
 
 def _load_land_geometries(path: Path) -> list[dict]:
@@ -103,44 +172,65 @@ def _load_land_geometries(path: Path) -> list[dict]:
     return geometries
 
 
-def _land_mask(geometries, shape, transform, crs) -> np.ndarray:
-    """Keep pixel centres inside land, preserving polygon holes."""
-    
-    if CRS.from_user_input(crs) != WGS84_CRS:
-        geometries = [transform_geom(WGS84_CRS, crs, g) for g in geometries]
+def _land_mask(
+    land_geometries,
+    raster_shape: tuple[int, int],
+    grid: RasterGrid,
+) -> np.ndarray:
+    """
+    Keep pixel centres inside land, 
+    preserving polygon holes.
+    """
+
+    if CRS.from_user_input(grid.crs) != WGS84_CRS:
+        land_geometries = [
+            transform_geom(WGS84_CRS, grid.crs, geometry)
+            for geometry in land_geometries
+        ]
     return geometry_mask(
-        geometries, out_shape=shape, transform=transform,
-        invert=True, all_touched=False,
+        land_geometries,
+        out_shape=raster_shape,
+        transform=grid.grid_transform,
+        invert=True,
+        all_touched=False,
     )
 
 
 def _reproject_to_webmercator(
-    values: np.ndarray, src_crs, src_transform, src_bounds, land_geometries=None,
+    values: np.ndarray, source_grid: RasterGrid, land_geometries=None,
 ):
-    """Resample a geographic grid onto EPSG:3857 pixels (nearest-neighbour).
+    """
+    Resample a geographic grid onto EPSG:3857 pixels (nearest-neighbour).
 
     Returns the reprojected array and its true (west, south, east, north) edges
     in WGS84 longitude/latitude.
     """
 
     height, width = values.shape
+
     dst_transform, dst_width, dst_height = calculate_default_transform(
-        src_crs, WEBMERCATOR_CRS, width, height, *src_bounds
+        source_grid.crs, WEBMERCATOR_CRS, width, height, *source_grid.bounds
     )
+
     destination = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
     reproject(
         source=values.astype(np.float32), destination=destination,
-        src_transform=src_transform, src_crs=src_crs, src_nodata=np.nan,
+        src_transform=source_grid.grid_transform, src_crs=source_grid.crs, src_nodata=np.nan,
         dst_transform=dst_transform, dst_crs=WEBMERCATOR_CRS, dst_nodata=np.nan,
         resampling=Resampling.nearest, init_dest_nodata=True,
     )
-    if land_geometries is not None:
-        land = _land_mask(
-            land_geometries, destination.shape, dst_transform, WEBMERCATOR_CRS
-        )
-        destination[~land] = np.nan
+
     mercator_bounds = array_bounds(dst_height, dst_width, dst_transform)
+    if land_geometries is not None:
+        destination_grid = RasterGrid(
+            crs=WEBMERCATOR_CRS,
+            grid_transform=dst_transform,
+            bounds=mercator_bounds,
+        )
+        land = _land_mask(land_geometries, destination.shape, destination_grid)
+        destination[~land] = np.nan
     lonlat_bounds = transform_bounds(WEBMERCATOR_CRS, WGS84_CRS, *mercator_bounds, densify_pts=21)
+    
     return destination, lonlat_bounds
 
 
@@ -149,7 +239,10 @@ def _write_map(
     column: str, units: str, vmin: float, vmax: float, raw_min: float, raw_max: float,
     png_scale: int = 1, discrete_colors: bool = False,
 ) -> None:
-    """Write a palette-indexed PNG (index 255 = transparent nodata) and its MapLibre sidecar."""
+    """
+    Write a palette-indexed PNG (index 255 = transparent nodata) 
+    and its MapLibre sidecar.
+    """
 
     rgb = palette_rgb(colors, discrete_colors)
     image = Image.fromarray(to_indices(values, vmin, vmax))
@@ -184,27 +277,31 @@ def _write_map(
 
 
 def _render_map(
-    total_stress_days,
-    source_crs,
-    source_grid_transform,
-    source_bounds,
+    layer: MapLayer,
     output: MapOutput,
-    metric_band_name: str,
-    metric_units: str,
     options: RenderOptions,
     land_geometries=None,
 ) -> None:
+    """
+    Reproject a layer, 
+    optionally mask sea pixels, 
+    and write its PNG and JSON sidecar.
+    """
 
     png_path, json_path, colors = output.png_path, output.json_path, output.colors
     png_scale, discrete_colors = options.png_scale, options.discrete_colors
+    metric_band_name, metric_units = layer.metric_band_name, layer.metric_units
 
-    if not np.isfinite(total_stress_days).any():
+    if not np.isfinite(layer.values).any():
         raise ValueError(f"No valid pixels to plot for {png_path.name}")
     if png_scale < 1:
         raise ValueError("png_scale must be a positive integer")
 
-    raw_min, raw_max = float(np.nanmin(total_stress_days)), float(np.nanmax(total_stress_days))
+    # np.nanmin() returns the smallest value in an array while ignoring NaN values.
+    # NOTE: the original docstring is not human-readable
+    raw_min, raw_max = float(np.nanmin(layer.values)), float(np.nanmax(layer.values))
     print(f"{png_path.name}: min {raw_min:.1f} (lightest), max {raw_max:.1f} (darkest)")
+
     vmin, vmax = raw_min, raw_max
 
     if vmax == vmin:
@@ -212,7 +309,7 @@ def _render_map(
         vmax = vmin + 1.0
 
     projected, lonlat_bounds = _reproject_to_webmercator(
-        total_stress_days, source_crs, source_grid_transform, source_bounds, land_geometries=land_geometries
+        layer.values, layer.grid, land_geometries=land_geometries
     )
     if not np.isfinite(projected).any():
         raise ValueError(f"Reprojection left no valid pixels for {png_path.name}")
