@@ -24,8 +24,8 @@ export function attachPointPopup(map, { summaryReader, buildContent, maplibre })
 
       if (!point) {
         popup.setText(
-          "No point data available. Select a regional PNG and click within " +
-          "its summary GeoTIFF extent. If the selection just changed, click again.",
+          "No point data available. Click within a regional summary GeoTIFF extent. " +
+          "If the selection just changed, click again.",
         );
         return;
       }

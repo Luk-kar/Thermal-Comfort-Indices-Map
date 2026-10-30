@@ -11,6 +11,7 @@ import { createRegionalRepository } from "./data/regional-files.js";
 import { buildPointContent } from "./popup/content.js";
 import { attachPointPopup } from "./popup/controller.js";
 import { initializeSidebar } from "./ui/sidebar.js";
+import { createCombinedRepository } from "./data/combined-files.js";
 
 function startApplication() {
 
@@ -22,13 +23,15 @@ function startApplication() {
 
   const map = createMap(maplibre);
 
-  const repository = createRegionalRepository({
+  const regionalRepository = createRegionalRepository({
     outputDir: OUTPUT_DIR,
     regions: REGIONS,
     pngFiles: PNG_FILES,
     summaryTifName: SUMMARY_TIF_NAME,
     geoTIFF: globalThis.GeoTIFF,
   });
+
+  const repository = createCombinedRepository(regionalRepository);
 
   const state = {
     selectionId: 0,

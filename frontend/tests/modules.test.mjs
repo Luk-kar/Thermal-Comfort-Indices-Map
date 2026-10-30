@@ -184,16 +184,64 @@ test("popup hides zero-day rows but retains zero-degree temperature records", as
 test("overlay ignores stale image placement and uses the latest slider opacity", async () => {
   const pending = {};
   const map = new MockMap();
-  const overlay = createPngOverlay(map, { getPlacement: name => new Promise(resolve => { pending[name] = resolve; }) });
+
+  const overlay = createPngOverlay(map, {
+    getPlacements: name => new Promise(resolve => {
+      pending[name] = resolve;
+    }),
+  });
+
   const first = overlay.showImage("first.png");
-  const second = overlay.showImage("second.png", { opacity: 0.7, fit: false });
+  const second = overlay.showImage("second.png", {
+    opacity: 0.7,
+    fit: false,
+  });
+
+  // A slider change during loading must apply to every new layer.
   overlay.setOpacity(0.3);
-  pending["second.png"]({ url: "second.png", coordinates: [], bounds: [0, 0, 1, 1] });
+
+  const coordinates = [[0, 1], [1, 1], [1, 0], [0, 0]];
+  const bounds = [0, 0, 1, 1];
+
+  pending["second.png"]([
+    {
+      url: "azores/second.png",
+      coordinates,
+      bounds,
+    },
+    {
+      url: "mainland/second.png",
+      coordinates,
+      bounds,
+    },
+  ]);
   await second;
-  pending["first.png"]({ url: "first.png", coordinates: [], bounds: [0, 0, 1, 1] });
+
+  // The older selection finishes after the newer selection.
+  pending["first.png"]([
+    {
+      url: "azores/first.png",
+      coordinates,
+      bounds,
+    },
+  ]);
   await first;
-  assert.equal(map.sources["output-png"].url, "second.png");
-  assert.equal(map.layers["output-png-layer"].paint["raster-opacity"], 0.3);
+
+  const sources = Object.values(map.sources);
+  const layers = Object.values(map.layers);
+
+  assert.deepEqual(
+    sources.map(source => source.url),
+    ["azores/second.png", "mainland/second.png"],
+  );
+
+  assert.equal(layers.length, 2);
+
+  for (const layer of layers) {
+    assert.equal(layer.paint["raster-opacity"], 0.3);
+    assert.ok(map.getSource(layer.source));
+  }
+
   assert.equal(map.fittedBounds, undefined);
 });
 
@@ -262,10 +310,10 @@ test("thin entry starts the application and registers each handler once", async 
   assert.equal(createdMap.handlers.click.length, 1);
   assert.equal(createdMap.handlers.error.length, 1);
   await createdMap.handlers.load[0]();
-  assert.equal(elements.files.children.length, 16);
-  assert.equal(
-    elements.files.children[0].textContent,
-    "azores/utci_cold_days.png",
+  assert.equal(elements.files.children.length, 2);
+  assert.deepEqual(
+    elements.files.children.map(item => item.textContent),
+    ["utci_cold_days.png", "utci_heat_days.png"],
   );
 
   // setFiles() starts selection asynchronously; explicitly await a selection
