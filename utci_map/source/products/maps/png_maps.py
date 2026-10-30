@@ -221,7 +221,9 @@ def _reproject_to_webmercator(
     )
 
     mercator_bounds = array_bounds(dst_height, dst_width, dst_transform)
+
     if land_geometries is not None:
+        
         destination_grid = RasterGrid(
             crs=WEBMERCATOR_CRS,
             grid_transform=dst_transform,
@@ -229,6 +231,7 @@ def _reproject_to_webmercator(
         )
         land = _land_mask(land_geometries, destination.shape, destination_grid)
         destination[~land] = np.nan
+
     lonlat_bounds = transform_bounds(WEBMERCATOR_CRS, WGS84_CRS, *mercator_bounds, densify_pts=21)
     
     return destination, lonlat_bounds
