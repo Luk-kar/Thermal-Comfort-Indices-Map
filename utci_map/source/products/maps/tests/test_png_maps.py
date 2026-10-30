@@ -1,3 +1,4 @@
+from dataclasses import FrozenInstanceError, replace
 import json
 
 import numpy as np
@@ -6,7 +7,9 @@ from PIL import Image
 
 rasterio = pytest.importorskip("rasterio")
 from rasterio.transform import from_origin
-from utci_map.source.products.maps.png_maps import render_pngs
+from utci_map.source.products.maps.png_maps import (
+    COASTLINE_PATH, MapOutput, RenderOptions, render_pngs,
+)
 
 
 @pytest.fixture
@@ -40,14 +43,72 @@ def map_input(tmp_path):
 def render_options(tmp_path):
 
     return dict(
-        coastline_path=None,
-        cold_png_path=tmp_path / "images" / "cold.png",
-        cold_json_path=tmp_path / "metadata" / "cold.json",
-        heat_png_path=tmp_path / "images" / "heat.png",
-        heat_json_path=tmp_path / "metadata" / "heat.json",
-        cold_colors=["#000000", "#ffffff"],
-        heat_colors=["#000000", "#ff0000"],
+        cold=MapOutput(
+            png_path=tmp_path / "images" / "cold.png",
+            json_path=tmp_path / "metadata" / "cold.json",
+            colors=("#000000", "#ffffff"),
+        ),
+        heat=MapOutput(
+            png_path=tmp_path / "images" / "heat.png",
+            json_path=tmp_path / "metadata" / "heat.json",
+            colors=("#000000", "#ff0000"),
+        ),
+        options=RenderOptions(coastline_path=None),
     )
+
+
+def test_configuration_defaults_and_immutability(render_options):
+    defaults = RenderOptions()
+    assert defaults.png_scale == 1
+    assert defaults.discrete_colors is False
+    assert defaults.coastline_path == COASTLINE_PATH
+    assert render_options["options"].coastline_path is None
+    assert isinstance(render_options["cold"].colors, tuple)
+    with pytest.raises(FrozenInstanceError):
+        defaults.png_scale = 2
+    with pytest.raises(FrozenInstanceError):
+        render_options["cold"].png_path = render_options["heat"].png_path
+
+
+def test_configuration_and_maps_require_keyword_arguments(map_input, render_options):
+    with pytest.raises(TypeError):
+        RenderOptions(2)
+    with pytest.raises(TypeError):
+        MapOutput(
+            render_options["cold"].png_path,
+            render_options["cold"].json_path,
+            ("#000000", "#ffffff"),
+        )
+    with pytest.raises(TypeError):
+        render_pngs(map_input(), render_options["cold"], render_options["heat"])
+
+
+@pytest.mark.parametrize("explicit_none", [False, True])
+def test_default_render_options_use_configured_coastline(
+    map_input, render_options, tmp_path, monkeypatch, explicit_none,
+):
+    # Rebase the relative default without accessing the project's GISCO file.
+    if COASTLINE_PATH.is_absolute():
+        pytest.skip("This default-coastline test requires a relative configured path")
+    monkeypatch.chdir(tmp_path)
+    COASTLINE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    COASTLINE_PATH.write_text(json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[
+                [-24, 65], [-23, 65], [-23, 67], [-24, 67], [-24, 65],
+            ]],
+        }}],
+    }), encoding="utf-8")
+    kwargs = {"cold": render_options["cold"], "heat": render_options["heat"]}
+    if explicit_none:
+        kwargs["options"] = None
+    render_pngs(map_input(), **kwargs)
+    for kind in ("cold", "heat"):
+        with Image.open(render_options[kind].png_path) as image:
+            alpha = np.array(image.convert("RGBA"))[:, :, 3]
+            assert (alpha[:, -1] == 0).all()
+            assert (alpha == 255).any()
 
 
 def test_coastline_masks_sea_and_excludes_it_from_range(map_input, render_options, tmp_path):
@@ -63,14 +124,17 @@ def test_coastline_masks_sea_and_excludes_it_from_range(map_input, render_option
     values = np.full((8, 8), 999., dtype=float)
     values[:, :4] = 10.
     values[0, 0] = np.nan
-    options = {**render_options, "coastline_path": coastline}
+    options = {
+        **render_options,
+        "options": replace(render_options["options"], coastline_path=coastline),
+    }
     render_pngs(map_input(cold=values, heat=values), **options)
 
     for kind in ("cold", "heat"):
-        metadata = json.loads(options[f"{kind}_json_path"].read_text())
+        metadata = json.loads(options[kind].json_path.read_text())
         assert metadata["metric"]["raw_min"] == 10.
         assert metadata["metric"]["raw_max"] == 10.
-        with Image.open(options[f"{kind}_png_path"]) as image:
+        with Image.open(options[kind].png_path) as image:
             pixels = np.array(image)
             alpha = np.array(image.convert("RGBA"))[:, :, 3]
             assert (alpha == 0).any()
@@ -113,7 +177,12 @@ def test_land_mask_reprojects_polygons():
 
 
 def test_missing_coastline_fails(map_input, render_options, tmp_path):
-    options = {**render_options, "coastline_path": tmp_path / "missing.geojson"}
+    options = {
+        **render_options,
+        "options": replace(
+            render_options["options"], coastline_path=tmp_path / "missing.geojson",
+        ),
+    }
     with pytest.raises(FileNotFoundError):
         render_pngs(map_input(), **options)
 
@@ -143,8 +212,8 @@ def test_creates_pngs_and_matching_sidecars(map_input, render_options):
         ("heat", "days_daily_max_above_26_total", 5., 5.),
     ]:
 
-        png_path = render_options[f"{kind}_png_path"]
-        metadata = json.loads(render_options[f"{kind}_json_path"].read_text())
+        png_path = render_options[kind].png_path
+        metadata = json.loads(render_options[kind].json_path.read_text())
         assert metadata["image"] == png_path.name
         assert metadata["crs"] == "EPSG:3857"
         assert metadata["metric"]["column"] == metric
@@ -180,18 +249,21 @@ def test_scale_changes_image_size_not_geographic_placement(map_input, render_opt
     """
 
     path = map_input()
-    render_pngs(path, **render_options, png_scale=1)
+    render_pngs(path, **render_options)
 
-    with Image.open(render_options["cold_png_path"]) as image:
+    with Image.open(render_options["cold"].png_path) as image:
         original_size = image.size
 
-    original_metadata = json.loads(render_options["cold_json_path"].read_text())
-    render_pngs(path, **render_options, png_scale=2)
+    original_metadata = json.loads(render_options["cold"].json_path.read_text())
+    render_pngs(path, **{
+        **render_options,
+        "options": replace(render_options["options"], png_scale=2),
+    })
 
-    with Image.open(render_options["cold_png_path"]) as image:
+    with Image.open(render_options["cold"].png_path) as image:
         assert image.size == tuple(2 * value for value in original_size)
 
-    assert json.loads(render_options["cold_json_path"].read_text()) == original_metadata
+    assert json.loads(render_options["cold"].json_path.read_text()) == original_metadata
 
 
 def test_missing_pixels_remain_transparent(map_input, render_options):
@@ -200,7 +272,7 @@ def test_missing_pixels_remain_transparent(map_input, render_options):
     values[2:6, 2:6] = 10
     render_pngs(map_input(cold=values, heat=values), **render_options)
 
-    with Image.open(render_options["cold_png_path"]) as image:
+    with Image.open(render_options["cold"].png_path) as image:
         alpha = np.array(image.convert("RGBA"))[:, :, 3]
         assert (alpha == 0).any()
         assert (alpha == 255).any()
@@ -224,7 +296,10 @@ def test_invalid_input_raises(map_input, render_options, case):
 
     else:
         path = map_input()
-        options["png_scale"] = 0
+        render_options = {
+            **render_options,
+            "options": replace(render_options["options"], png_scale=0),
+        }
         error = ValueError
 
     with pytest.raises(error):

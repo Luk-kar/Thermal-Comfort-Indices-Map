@@ -3,7 +3,7 @@
 from utci_map.source import config
 from utci_map.source.computation.thermal_stress_summary import build_bands
 from utci_map.source.products.geotiff import write_geotiff
-from utci_map.source.products.maps.png_maps import render_pngs
+from utci_map.source.products.maps.png_maps import render_pngs, MapOutput, RenderOptions
 from utci_map.source.loading.combine_yearly_utci_statistics import load_yearly_statistics
 
 
@@ -43,14 +43,20 @@ def create_tif(annual):
 def create_pngs_with_sidecars():
     render_pngs(
         config.TIF_PATH,
-        config.COLD_PNG_PATH,
-        config.COLD_JSON_PATH,
-        config.HEAT_PNG_PATH,
-        config.HEAT_JSON_PATH,
-        config.COLD_COLORS,
-        config.HEAT_COLORS,
-        config.PNG_SCALE,
-        config.DISCRETE_COLORS,
+        cold=MapOutput(
+            png_path=config.COLD_PNG_PATH,
+            json_path=config.COLD_JSON_PATH,
+            colors=tuple(config.COLD_COLORS),
+        ),
+        heat=MapOutput(
+            png_path=config.HEAT_PNG_PATH,
+            json_path=config.HEAT_JSON_PATH,
+            colors=tuple(config.HEAT_COLORS),
+        ),
+        options=RenderOptions(
+            png_scale=config.PNG_SCALE,
+            discrete_colors=config.DISCRETE_COLORS,
+        ),
     )
 
     print(

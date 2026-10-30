@@ -4,9 +4,12 @@ import pytest
 from utci_map.source.products.maps.palette import palette_rgb
 
 
-def test_continuous_palette_contains_expected_colours():
+@pytest.mark.parametrize("colors", [
+    ["#000000", "#ffffff"], ("#000000", "#ffffff"),
+])
+def test_continuous_palette_contains_expected_colours(colors):
 
-    result = palette_rgb(["#000000", "#ffffff"])
+    result = palette_rgb(colors)
 
     assert result.shape == (255, 3)
     assert result.dtype == np.uint8

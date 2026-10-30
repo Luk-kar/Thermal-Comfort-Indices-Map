@@ -4,13 +4,14 @@ Define colour palettes for UTCI cold- and heat-day maps.
 Map day counts to palette indices for PNG rendering, with a reserved
 index for transparent missing pixels.
 """
+from collections.abc import Sequence
 import re
 
 import numpy as np
 
 from utci_map.source.config import MAX_INDEX, NODATA_INDEX
 
-def palette_rgb(colors: list[str], discrete_colors: bool = False) -> np.ndarray:
+def palette_rgb(colors: Sequence[str], discrete_colors: bool = False) -> np.ndarray:
     """
     Return an RGB colour for each map palette index from 0 to MAX_INDEX.
 

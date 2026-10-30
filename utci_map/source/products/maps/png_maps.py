@@ -1,6 +1,8 @@
 """Reproject maps and write indexed PNGs with MapLibre JSON sidecars."""
 
 import json
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -23,19 +25,34 @@ WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 WGS84_CRS: CRS = CRS.from_epsg(4326)
 
 
+@dataclass(frozen=True, kw_only=True)
+class MapOutput:
+    """Output paths and immutable palette for one map."""
+
+    png_path: Path
+    json_path: Path
+    colors: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class RenderOptions:
+    """Rendering settings shared by the cold and heat maps."""
+
+    png_scale: int = 1
+    discrete_colors: bool = False
+    coastline_path: Path | None = COASTLINE_PATH
+
+
 def render_pngs(
     tif_path: Path,
-    cold_png_path: Path,
-    cold_json_path: Path,
-    heat_png_path: Path,
-    heat_json_path: Path,
-    cold_colors: list[str],
-    heat_colors: list[str],
-    png_scale: int = 1,
-    discrete_colors: bool = False,
-    coastline_path: Path | None = COASTLINE_PATH,
-):
-    """Render land-only maps; pass coastline_path=None to disable masking."""
+    *,
+    cold: MapOutput,
+    heat: MapOutput,
+    options: RenderOptions | None = None,
+) -> None:
+    """Render two maps; set options.coastline_path=None to disable masking."""
+    if options is None:
+        options = RenderOptions()
 
     with rasterio.open(tif_path) as src:
 
@@ -51,19 +68,22 @@ def render_pngs(
         crs, transform, bounds = src.crs, src.transform, src.bounds
 
     land_geometries = None
-    if coastline_path is not None:
-        land_geometries = _load_land_geometries(coastline_path)
+    if options.coastline_path is not None:
+        land_geometries = _load_land_geometries(options.coastline_path)
         land = _land_mask(land_geometries, cold_days.shape, transform, crs)
         cold_days[~land] = np.nan
         heat_days[~land] = np.nan
 
-    _render_map(cold_days, crs, transform, bounds, cold_colors,
-               cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors,
-               land_geometries=land_geometries)
-    _render_map(heat_days, crs, transform, bounds, heat_colors,
-               heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors,
-               land_geometries=land_geometries)
-               
+    _render_map(
+        cold_days, crs, transform, bounds, cold, COLD_TOTAL_BAND, "days",
+        options=options, land_geometries=land_geometries,
+    )
+    _render_map(
+        heat_days, crs, transform, bounds, heat, HEAT_TOTAL_BAND, "days",
+        options=options, land_geometries=land_geometries,
+    )
+
+
 def _load_land_geometries(path: Path) -> list[dict]:
     """Read GISCO land polygons in EPSG:4326; fail on malformed input."""
 
@@ -124,7 +144,7 @@ def _reproject_to_webmercator(
 
 
 def _write_map(
-    values, lonlat_bounds, colors, png_path: Path, json_path: Path,
+    values, lonlat_bounds, colors: Sequence[str], png_path: Path, json_path: Path,
     column: str, units: str, vmin: float, vmax: float, raw_min: float, raw_max: float,
     png_scale: int = 1, discrete_colors: bool = False,
 ) -> None:
@@ -163,10 +183,11 @@ def _write_map(
 
 
 def _render_map(
-    total, crs, transform, bounds, colors, png_path: Path, json_path: Path, column: str, units: str,
-    png_scale: int = 1, discrete_colors: bool = False,
-    land_geometries=None,
+    total, crs, transform, bounds, output: MapOutput, column: str, units: str,
+    *, options: RenderOptions, land_geometries=None,
 ) -> None:
+    png_path, json_path, colors = output.png_path, output.json_path, output.colors
+    png_scale, discrete_colors = options.png_scale, options.discrete_colors
 
     if not np.isfinite(total).any():
         raise ValueError(f"No valid pixels to plot for {png_path.name}")
