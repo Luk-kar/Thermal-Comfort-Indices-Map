@@ -45,12 +45,12 @@ class RenderOptions:
 
 def render_pngs(
     tif_path: Path,
-    *,
     cold: MapOutput,
     heat: MapOutput,
     options: RenderOptions | None = None,
 ) -> None:
     """Render two maps; set options.coastline_path=None to disable masking."""
+    
     if options is None:
         options = RenderOptions()
 

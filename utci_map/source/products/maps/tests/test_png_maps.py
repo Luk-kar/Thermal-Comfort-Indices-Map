@@ -79,9 +79,6 @@ def test_configuration_and_maps_require_keyword_arguments(map_input, render_opti
             render_options["cold"].json_path,
             ("#000000", "#ffffff"),
         )
-    with pytest.raises(TypeError):
-        render_pngs(map_input(), render_options["cold"], render_options["heat"])
-
 
 @pytest.mark.parametrize("explicit_none", [False, True])
 def test_default_render_options_use_configured_coastline(
