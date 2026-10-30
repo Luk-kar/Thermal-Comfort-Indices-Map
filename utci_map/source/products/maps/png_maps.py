@@ -1,15 +1,17 @@
 """Reproject maps and write indexed PNGs with MapLibre JSON sidecars."""
 
+import json
 from pathlib import Path
 
 import numpy as np
 import rasterio
 from PIL import Image
 from rasterio.crs import CRS
+from rasterio.features import geometry_mask
 from rasterio.transform import array_bounds
-from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
+from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds, transform_geom
 
-from utci_map.source.config import MAX_INDEX, NODATA_INDEX
+from utci_map.source.config import MAX_INDEX, NODATA_INDEX, COASTLINE_PATH
 from utci_map.source.products.geotiff import band_indices
 from utci_map.source.products.maps.palette import palette_rgb, to_indices
 from utci_map.source.products.maps.sidecar import write_sidecar
@@ -20,13 +22,20 @@ WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 
 WGS84_CRS: CRS = CRS.from_epsg(4326)
 
+
 def render_pngs(
     tif_path: Path,
-    cold_png_path: Path, cold_json_path: Path,
-    heat_png_path: Path, heat_json_path: Path,
-    cold_colors: list[str], heat_colors: list[str],
-    png_scale: int = 1, discrete_colors: bool = False,
+    cold_png_path: Path,
+    cold_json_path: Path,
+    heat_png_path: Path,
+    heat_json_path: Path,
+    cold_colors: list[str],
+    heat_colors: list[str],
+    png_scale: int = 1,
+    discrete_colors: bool = False,
+    coastline_path: Path | None = COASTLINE_PATH,
 ):
+    """Render land-only maps; pass coastline_path=None to disable masking."""
 
     with rasterio.open(tif_path) as src:
 
@@ -41,12 +50,52 @@ def render_pngs(
         heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
         crs, transform, bounds = src.crs, src.transform, src.bounds
 
+    land_geometries = None
+    if coastline_path is not None:
+        land_geometries = _load_land_geometries(coastline_path)
+        land = _land_mask(land_geometries, cold_days.shape, transform, crs)
+        cold_days[~land] = np.nan
+        heat_days[~land] = np.nan
+
     _render_map(cold_days, crs, transform, bounds, cold_colors,
-               cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors)
+               cold_png_path, cold_json_path, COLD_TOTAL_BAND, "days", png_scale, discrete_colors,
+               land_geometries=land_geometries)
     _render_map(heat_days, crs, transform, bounds, heat_colors,
-               heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors)
+               heat_png_path, heat_json_path, HEAT_TOTAL_BAND, "days", png_scale, discrete_colors,
+               land_geometries=land_geometries)
                
-def _reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bounds):
+def _load_land_geometries(path: Path) -> list[dict]:
+    """Read GISCO land polygons in EPSG:4326; fail on malformed input."""
+
+    with Path(path).open(encoding="utf-8") as source:
+        collection = json.load(source)
+
+    if collection.get("type") != "FeatureCollection":
+        raise ValueError(f"{path}: expected a GeoJSON FeatureCollection")
+
+    geometries = [feature.get("geometry") for feature in collection["features"]]
+    if not geometries or any(
+        geometry is None or geometry.get("type") not in {"Polygon", "MultiPolygon"}
+        for geometry in geometries
+    ):
+        raise ValueError(f"{path}: expected non-empty land Polygon/MultiPolygon features")
+    return geometries
+
+
+def _land_mask(geometries, shape, transform, crs) -> np.ndarray:
+    """Keep pixel centres inside land, preserving polygon holes."""
+    
+    if CRS.from_user_input(crs) != WGS84_CRS:
+        geometries = [transform_geom(WGS84_CRS, crs, g) for g in geometries]
+    return geometry_mask(
+        geometries, out_shape=shape, transform=transform,
+        invert=True, all_touched=False,
+    )
+
+
+def _reproject_to_webmercator(
+    values: np.ndarray, src_crs, src_transform, src_bounds, land_geometries=None,
+):
     """Resample a geographic grid onto EPSG:3857 pixels (nearest-neighbour).
 
     Returns the reprojected array and its true (west, south, east, north) edges
@@ -64,6 +113,11 @@ def _reproject_to_webmercator(values: np.ndarray, src_crs, src_transform, src_bo
         dst_transform=dst_transform, dst_crs=WEBMERCATOR_CRS, dst_nodata=np.nan,
         resampling=Resampling.nearest, init_dest_nodata=True,
     )
+    if land_geometries is not None:
+        land = _land_mask(
+            land_geometries, destination.shape, dst_transform, WEBMERCATOR_CRS
+        )
+        destination[~land] = np.nan
     mercator_bounds = array_bounds(dst_height, dst_width, dst_transform)
     lonlat_bounds = transform_bounds(WEBMERCATOR_CRS, WGS84_CRS, *mercator_bounds, densify_pts=21)
     return destination, lonlat_bounds
@@ -111,6 +165,7 @@ def _write_map(
 def _render_map(
     total, crs, transform, bounds, colors, png_path: Path, json_path: Path, column: str, units: str,
     png_scale: int = 1, discrete_colors: bool = False,
+    land_geometries=None,
 ) -> None:
 
     if not np.isfinite(total).any():
@@ -126,7 +181,9 @@ def _render_map(
         print(f"  All pixels equal ({vmin:.1f}); the whole map will be the lightest colour.")
         vmax = vmin + 1.0
 
-    projected, lonlat_bounds = _reproject_to_webmercator(total, crs, transform, bounds)
+    projected, lonlat_bounds = _reproject_to_webmercator(
+        total, crs, transform, bounds, land_geometries=land_geometries
+    )
     if not np.isfinite(projected).any():
         raise ValueError(f"Reprojection left no valid pixels for {png_path.name}")
 

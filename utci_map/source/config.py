@@ -19,17 +19,23 @@ OUTPUT_DIR = Path("output")
 
 TIF_PATH = OUTPUT_DIR / "utci_summary.tif"
 
-
-COLD_PNG_PATH = OUTPUT_DIR / "utci_cold_days.png"
-
-
-HEAT_PNG_PATH = OUTPUT_DIR / "utci_heat_days.png"
+COLD_DAYS = "utci_cold_days"
+HEAT_DAYS = "utci_heat_days"
 
 
-COLD_JSON_PATH = OUTPUT_DIR / "utci_cold_days.json"
+COLD_PNG_PATH = OUTPUT_DIR / f"{COLD_DAYS}.png"
 
 
-HEAT_JSON_PATH = OUTPUT_DIR / "utci_heat_days.json"
+HEAT_PNG_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.png"
+
+
+COLD_JSON_PATH = OUTPUT_DIR / f"{COLD_DAYS}.json"
+
+
+HEAT_JSON_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.json"
+
+
+COASTLINE_PATH = Path("gisco") / "COAS_RG_10M_2016_4326.geojson"
 
 
 COLD_COLORS = [

@@ -40,6 +40,7 @@ def map_input(tmp_path):
 def render_options(tmp_path):
 
     return dict(
+        coastline_path=None,
         cold_png_path=tmp_path / "images" / "cold.png",
         cold_json_path=tmp_path / "metadata" / "cold.json",
         heat_png_path=tmp_path / "images" / "heat.png",
@@ -47,6 +48,88 @@ def render_options(tmp_path):
         cold_colors=["#000000", "#ffffff"],
         heat_colors=["#000000", "#ff0000"],
     )
+
+
+def test_coastline_masks_sea_and_excludes_it_from_range(map_input, render_options, tmp_path):
+    coastline = tmp_path / "land.geojson"
+    coastline.write_text(json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[
+                [-24, 65], [-23, 65], [-23, 67], [-24, 67], [-24, 65],
+            ]],
+        }}],
+    }), encoding="utf-8")
+    values = np.full((8, 8), 999., dtype=float)
+    values[:, :4] = 10.
+    values[0, 0] = np.nan
+    options = {**render_options, "coastline_path": coastline}
+    render_pngs(map_input(cold=values, heat=values), **options)
+
+    for kind in ("cold", "heat"):
+        metadata = json.loads(options[f"{kind}_json_path"].read_text())
+        assert metadata["metric"]["raw_min"] == 10.
+        assert metadata["metric"]["raw_max"] == 10.
+        with Image.open(options[f"{kind}_png_path"]) as image:
+            pixels = np.array(image)
+            alpha = np.array(image.convert("RGBA"))[:, :, 3]
+            assert (alpha == 0).any()
+            assert (alpha == 255).any()
+            assert (alpha[:, -1] == 0).all()
+            assert alpha[0, 0] == 0
+            np.testing.assert_array_equal(pixels[alpha == 255], 0)
+
+
+def test_land_mask_preserves_holes():
+    from utci_map.source.products.maps.png_maps import _land_mask, WGS84_CRS
+
+    geometry = {"type": "Polygon", "coordinates": [
+        [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]],
+        [[1, 1], [1, 3], [3, 3], [3, 1], [1, 1]],
+    ]}
+    mask = _land_mask([geometry], (4, 4), from_origin(0, 4, 1, 1), WGS84_CRS)
+    expected = np.ones((4, 4), dtype=bool)
+    expected[1:3, 1:3] = False
+    np.testing.assert_array_equal(mask, expected)
+
+
+def test_land_mask_reprojects_polygons():
+    from rasterio.transform import from_bounds
+    from rasterio.warp import transform_bounds
+    from utci_map.source.products.maps.png_maps import (
+        _land_mask, WGS84_CRS, WEBMERCATOR_CRS,
+    )
+
+    geometry = {"type": "Polygon", "coordinates": [[
+        [0, 0], [1, 0], [1, 2], [0, 2], [0, 0],
+    ]]}
+    bounds = transform_bounds(WGS84_CRS, WEBMERCATOR_CRS, 0, 0, 2, 2)
+    mask = _land_mask(
+        [geometry], (4, 4), from_bounds(*bounds, 4, 4), WEBMERCATOR_CRS,
+    )
+    expected = np.zeros((4, 4), dtype=bool)
+    expected[:, :2] = True
+    np.testing.assert_array_equal(mask, expected)
+
+
+def test_missing_coastline_fails(map_input, render_options, tmp_path):
+    options = {**render_options, "coastline_path": tmp_path / "missing.geojson"}
+    with pytest.raises(FileNotFoundError):
+        render_pngs(map_input(), **options)
+
+
+@pytest.mark.parametrize("features", [[], [{"geometry": None}], [
+    {"geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}},
+]])
+def test_invalid_coastline_geometries_fail(tmp_path, features):
+    from utci_map.source.products.maps.png_maps import _load_land_geometries
+
+    path = tmp_path / "invalid.geojson"
+    path.write_text(json.dumps({
+        "type": "FeatureCollection", "features": features,
+    }), encoding="utf-8")
+    with pytest.raises(ValueError):
+        _load_land_geometries(path)
 
 
 def test_creates_pngs_and_matching_sidecars(map_input, render_options):
