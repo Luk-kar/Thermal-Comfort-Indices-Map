@@ -1,4 +1,4 @@
-# Thermal Comfort Indices
+# 🗺️🌡️ Thermal Comfort Indices Map
 
 Download yearly **UTCI** (Universal Thermal Climate Index) statistics for European regions and turn them into GeoTIFF summaries, heat- and cold-stress PNG maps, and JSON metadata. The frontend displays regional layers and lets you click the map to inspect source-pixel values, including median yearly day counts and record UTCI values and years.
 
@@ -6,11 +6,11 @@ Download yearly **UTCI** (Universal Thermal Climate Index) statistics for Europe
   <img src="doc/images/heat-preview-europe.png" alt="European heat-stress map preview" width="80%">
 </p>
 
-## Data source
+## 🛰️ Data source
 
 [Copernicus ERA5 single-level reanalysis](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview) provides the broader climate-data context. The downloader requests precomputed yearly UTCI statistics from the CDS dataset `derived-utci-historical`, version `1_1`. The configured period is 2016–2025.
 
-## Setup
+## ⚙️ Setup
 
 Requires Python 3.12+, `uv`, and Node.js for frontend tests. Install the Python dependencies declared in `pyproject.toml`, including CDS API, Rasterio, Matplotlib, NetCDF4, SciPy, xarray, and pytest:
 
@@ -28,7 +28,7 @@ Paths, map styling, and processing years are configured in `utci_map/source/conf
 
 Rasterio/GDAL must support reading NetCDF files.
 
-## Download and process
+## 📥 Download and process
 
 Download one ZIP archive per configured region into `downloads/`:
 
@@ -48,7 +48,7 @@ Generate standalone previews from downloaded archives under `output/preview/<arc
 uv run python thermal_dataset_preview.py
 ```
 
-## Run the application
+## 🗺️ Run the application
 
 Serve the repository root so the frontend and generated outputs are available together:
 
@@ -58,7 +58,7 @@ uv run python -m http.server 8000
 
 Open `http://localhost:8000/frontend/`. Select a UTCI layer, adjust its opacity, and click a location to inspect the corresponding region’s summary GeoTIFF. Day counts represent median yearly counts. Point values come directly from the containing source pixel. The application pipeline masks sea pixels in PNGs while preserving the original GeoTIFF values.
 
-## Tests
+## 🧪 Tests
 
 Run the Python suite:
 
