@@ -69,6 +69,7 @@ def render_pngs(
 
     land_geometries = None
     if options.coastline_path is not None:
+
         land_geometries = _load_land_geometries(options.coastline_path)
         land = _land_mask(land_geometries, cold_days.shape, transform, crs)
         cold_days[~land] = np.nan
@@ -183,18 +184,26 @@ def _write_map(
 
 
 def _render_map(
-    total, crs, transform, bounds, output: MapOutput, column: str, units: str,
-    *, options: RenderOptions, land_geometries=None,
+    total_stress_days,
+    source_crs,
+    source_grid_transform,
+    source_bounds,
+    output: MapOutput,
+    metric_band_name: str,
+    metric_units: str,
+    options: RenderOptions,
+    land_geometries=None,
 ) -> None:
+
     png_path, json_path, colors = output.png_path, output.json_path, output.colors
     png_scale, discrete_colors = options.png_scale, options.discrete_colors
 
-    if not np.isfinite(total).any():
+    if not np.isfinite(total_stress_days).any():
         raise ValueError(f"No valid pixels to plot for {png_path.name}")
     if png_scale < 1:
         raise ValueError("png_scale must be a positive integer")
 
-    raw_min, raw_max = float(np.nanmin(total)), float(np.nanmax(total))
+    raw_min, raw_max = float(np.nanmin(total_stress_days)), float(np.nanmax(total_stress_days))
     print(f"{png_path.name}: min {raw_min:.1f} (lightest), max {raw_max:.1f} (darkest)")
     vmin, vmax = raw_min, raw_max
 
@@ -203,14 +212,14 @@ def _render_map(
         vmax = vmin + 1.0
 
     projected, lonlat_bounds = _reproject_to_webmercator(
-        total, crs, transform, bounds, land_geometries=land_geometries
+        total_stress_days, source_crs, source_grid_transform, source_bounds, land_geometries=land_geometries
     )
     if not np.isfinite(projected).any():
         raise ValueError(f"Reprojection left no valid pixels for {png_path.name}")
 
     _write_map(
         projected, lonlat_bounds, colors, png_path, json_path,
-        column, units, vmin, vmax, raw_min, raw_max,
+        metric_band_name, metric_units, vmin, vmax, raw_min, raw_max,
         png_scale=png_scale, discrete_colors=discrete_colors,
     )
 
