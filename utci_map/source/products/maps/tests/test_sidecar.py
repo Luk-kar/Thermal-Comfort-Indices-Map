@@ -16,6 +16,7 @@ def sidecar_input(tmp_path):
         crs="EPSG:3857", rgb=np.tile([12, 34, 56], (255, 1)),
         column="cold_days", units="days", vmin=0., vmax=254.,
         raw_min=1.123456789, raw_max=253.987654321,
+        local_min=2.123456789, local_max=252.987654321,
     )
 
 
@@ -54,7 +55,8 @@ def test_writes_image_placement_metric_and_colour_metadata(sidecar_input):
         [-13.5, 63.25], [-24.123457, 63.25],
     ]
     assert result["metric"] == dict(column="cold_days", min=0., max=254., units="days",
-                                    raw_min=1.123457, raw_max=253.987654)
+                                    raw_min=1.123457, raw_max=253.987654,
+                                    local_min=2.123457, local_max=252.987654)
     assert result["nodata"] == {"palette_index": 255, "alpha": 0}
 
     expected_indices = list(range(0, 254, 17)) + [254]

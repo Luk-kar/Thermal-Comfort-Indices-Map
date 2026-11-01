@@ -18,14 +18,17 @@ from utci_map.source.products.geotiff import write_geotiff
 from utci_map.source.products.maps.png_maps import (
     MapOutput,
     RenderOptions,
+    global_value_ranges,
     render_pngs,
 )
 
 
 def main():
 
+    tif_paths = []
+
     for region_name, _bounds in get_download_regions(EuropeBounds):
-        
+
         region_dir = region_name.lower()
         data_dir = config.DATA_DIR / region_dir
         output_dir = config.OUTPUT_DIR / region_dir
@@ -46,7 +49,21 @@ def main():
 
         tif_path = output_dir / config.TIF_PATH.name
         create_tif(annual, tif_path)
-        create_pngs_with_sidecars(tif_path, output_dir)
+        tif_paths.append(tif_path)
+
+    options = RenderOptions(
+        png_scale=config.PNG_SCALE,
+        discrete_colors=config.DISCRETE_COLORS,
+    )
+    cold_range, heat_range = global_value_ranges(tif_paths, options)
+
+    print(f"Global cold scale: {cold_range.vmin:.1f} to {cold_range.vmax:.1f} days")
+    print(f"Global heat scale: {heat_range.vmin:.1f} to {heat_range.vmax:.1f} days")
+
+    for tif_path in tif_paths:
+        create_pngs_with_sidecars(
+            tif_path, tif_path.parent, cold_range, heat_range, options
+        )
 
 
 def extract_region(archive_path, data_dir):
@@ -90,7 +107,7 @@ def create_tif(annual, tif_path):
     print(f"Wrote {tif_path} ({len(bands)} bands)")
 
 
-def create_pngs_with_sidecars(tif_path, output_dir):
+def create_pngs_with_sidecars(tif_path, output_dir, cold_range, heat_range, options):
     cold_png_path = output_dir / config.COLD_PNG_PATH.name
     cold_json_path = output_dir / config.COLD_JSON_PATH.name
     heat_png_path = output_dir / config.HEAT_PNG_PATH.name
@@ -108,10 +125,9 @@ def create_pngs_with_sidecars(tif_path, output_dir):
             json_path=heat_json_path,
             colors=tuple(config.HEAT_COLORS),
         ),
-        options=RenderOptions(
-            png_scale=config.PNG_SCALE,
-            discrete_colors=config.DISCRETE_COLORS,
-        ),
+        options=options,
+        cold_range=cold_range,
+        heat_range=heat_range,
     )
 
     print(

@@ -7,8 +7,9 @@ from PIL import Image
 
 rasterio = pytest.importorskip("rasterio")
 from rasterio.transform import from_origin
+from utci_map.source.config import MAX_INDEX
 from utci_map.source.products.maps.png_maps import (
-    COASTLINE_PATH, MapOutput, RenderOptions, render_pngs,
+    COASTLINE_PATH, MapOutput, RenderOptions, ValueRange, global_value_ranges, render_pngs,
 )
 
 
@@ -309,6 +310,174 @@ def test_invalid_input_raises(map_input, render_options, case):
 
     with pytest.raises(error):
         render_pngs(path, **render_options, **options)
+
+def _copy_tif(path, tmp_path, name):
+    """Keep a map_input raster; the fixture rewrites one path on every call."""
+
+    target = tmp_path / name
+    target.write_bytes(path.read_bytes())
+    return target
+
+
+def _outputs(tmp_path, name):
+
+    return dict(
+        cold=MapOutput(
+            png_path=tmp_path / name / "cold.png",
+            json_path=tmp_path / name / "cold.json",
+            colors=("#000000", "#ffffff"),
+        ),
+        heat=MapOutput(
+            png_path=tmp_path / name / "heat.png",
+            json_path=tmp_path / name / "heat.json",
+            colors=("#000000", "#ff0000"),
+        ),
+    )
+
+
+def test_global_value_ranges_span_all_regions_by_category(map_input, tmp_path):
+
+    first = np.full((8, 8), 20.)
+    first[0, 0] = np.nan
+    first[1, 1] = 300.
+    second = np.full((8, 8), 50.)
+    second[1, 1] = 70.
+    first_heat = np.full((8, 8), 4.)
+    second_heat = np.full((8, 8), 90.)
+
+    paths = [
+        _copy_tif(map_input(cold=first, heat=first_heat), tmp_path, "first.tif"),
+        _copy_tif(map_input(cold=second, heat=second_heat), tmp_path, "second.tif"),
+    ]
+
+    cold, heat = global_value_ranges(paths, RenderOptions(coastline_path=None))
+
+    assert cold == ValueRange(20., 300.)
+    assert heat == ValueRange(4., 90.)
+
+
+def test_global_value_ranges_exclude_sea_pixels(map_input, tmp_path):
+
+    coastline = tmp_path / "land.geojson"
+    coastline.write_text(json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": {
+            "type": "Polygon", "coordinates": [[
+                [-24, 65], [-23, 65], [-23, 67], [-24, 67], [-24, 65],
+            ]],
+        }}],
+    }), encoding="utf-8")
+    values = np.full((8, 8), 999., dtype=float)
+    values[:, :4] = 10.
+
+    cold, heat = global_value_ranges(
+        [map_input(cold=values, heat=values)], RenderOptions(coastline_path=coastline),
+    )
+
+    assert cold == ValueRange(10., 10.)
+    assert heat == ValueRange(10., 10.)
+
+
+def test_global_value_ranges_skip_a_region_without_valid_pixels(map_input, tmp_path):
+
+    paths = [
+        _copy_tif(map_input(cold=np.full((8, 8), np.nan)), tmp_path, "empty.tif"),
+        _copy_tif(map_input(cold=np.full((8, 8), 7.)), tmp_path, "valid.tif"),
+    ]
+
+    cold, _ = global_value_ranges(paths, RenderOptions(coastline_path=None))
+
+    assert cold == ValueRange(7., 7.)
+
+
+@pytest.mark.parametrize("case", ["no_paths", "all_missing"])
+def test_global_value_ranges_reject_input_without_valid_pixels(map_input, case):
+
+    paths = [] if case == "no_paths" else [map_input(cold=np.full((8, 8), np.nan))]
+
+    with pytest.raises(ValueError, match="No valid pixels"):
+        global_value_ranges(paths, RenderOptions(coastline_path=None))
+
+
+def test_shared_ranges_give_regions_the_same_scale(map_input, tmp_path):
+    """
+    Check that one day count has one colour across regions.
+
+    Both rasters hold a pixel with 50 days. Only the second reaches the top of
+    the scale, so the first must not stretch its own maximum to the darkest
+    colour, while the sidecars keep each region's real range as local_min
+    and local_max.
+    """
+
+    low = np.full((8, 8), 50.)
+    low[:, :4] = 25.
+    high = np.full((8, 8), 50.)
+    high[:, :4] = 100.
+    cold_range, heat_range = ValueRange(0., 100.), ValueRange(0., 200.)
+    options = RenderOptions(coastline_path=None)
+
+    for name, values in (("low", low), ("high", high)):
+        render_pngs(
+            map_input(cold=values, heat=values), **_outputs(tmp_path, name),
+            options=options, cold_range=cold_range, heat_range=heat_range,
+        )
+
+    metadata = {
+        name: json.loads((tmp_path / name / "cold.json").read_text())
+        for name in ("low", "high")
+    }
+    for name in ("low", "high"):
+        assert metadata[name]["metric"]["min"] == 0.
+        assert metadata[name]["metric"]["max"] == 100.
+        assert metadata[name]["metric"]["raw_min"] == 0.
+        assert metadata[name]["metric"]["raw_max"] == 100.
+    assert metadata["low"]["color_map"] == metadata["high"]["color_map"]
+    assert metadata["low"]["metric"]["local_min"] == 25.
+    assert metadata["low"]["metric"]["local_max"] == 50.
+    assert metadata["high"]["metric"]["local_min"] == 50.
+    assert metadata["high"]["metric"]["local_max"] == 100.
+
+    heat_metadata = json.loads((tmp_path / "low" / "heat.json").read_text())
+    assert heat_metadata["metric"]["max"] == 200.
+
+    with Image.open(tmp_path / "low" / "cold.png") as image:
+        low_pixels = np.array(image)
+    with Image.open(tmp_path / "high" / "cold.png") as image:
+        high_pixels = np.array(image)
+
+    fifty_days = round(0.5 * MAX_INDEX)
+    assert low_pixels.max() == fifty_days
+    assert fifty_days in high_pixels
+    assert high_pixels.max() == MAX_INDEX
+
+
+def test_constant_region_uses_its_position_on_the_shared_scale(map_input, tmp_path):
+
+    outputs = _outputs(tmp_path, "constant")
+    render_pngs(
+        map_input(cold=np.full((8, 8), 75.)), **outputs,
+        options=RenderOptions(coastline_path=None),
+        cold_range=ValueRange(0., 100.), heat_range=ValueRange(0., 100.),
+    )
+
+    with Image.open(outputs["cold"].png_path) as image:
+        pixels = np.array(image)
+    np.testing.assert_array_equal(pixels[pixels != 255], round(0.75 * MAX_INDEX))
+
+
+def test_degenerate_shared_range_still_renders(map_input, tmp_path):
+
+    outputs = _outputs(tmp_path, "degenerate")
+    render_pngs(
+        map_input(cold=np.full((8, 8), 5.)), **outputs,
+        options=RenderOptions(coastline_path=None),
+        cold_range=ValueRange(5., 5.), heat_range=ValueRange(5., 5.),
+    )
+
+    metadata = json.loads(outputs["cold"].json_path.read_text())
+    assert metadata["metric"]["min"] == 5.
+    assert metadata["metric"]["max"] == 6.
+
 
 @pytest.mark.parametrize("epsg", [4326, 3857])
 def test_land_mask_keeps_intersecting_pixels_without_land_at_centres(epsg):

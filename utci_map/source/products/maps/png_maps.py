@@ -101,16 +101,84 @@ class RenderOptions:
     coastline_path: Path | None = COASTLINE_PATH
 
 
+@dataclass(frozen=True)
+class ValueRange:
+    """Metric values mapped to the lightest and darkest palette colours."""
+
+    vmin: float
+    vmax: float
+
+
 def render_pngs(
     tif_path: Path,
     cold: MapOutput,
     heat: MapOutput,
     options: RenderOptions | None = None,
+    cold_range: ValueRange | None = None,
+    heat_range: ValueRange | None = None,
 ) -> None:
-    """Render two maps; set options.coastline_path=None to disable masking."""
-    
+    """
+    Render two maps; set options.coastline_path=None to disable masking.
+
+    A map without a value range is normalised to its own minimum and maximum.
+    """
+
     if options is None:
         options = RenderOptions()
+
+    cold_layer, heat_layer, land_geometries = _load_layers(tif_path, options)
+
+    _render_map(
+        cold_layer, cold, options,
+        land_geometries=land_geometries, value_range=cold_range,
+    )
+    _render_map(
+        heat_layer, heat, options,
+        land_geometries=land_geometries, value_range=heat_range,
+    )
+
+
+def global_value_ranges(
+    tif_paths: Sequence[Path],
+    options: RenderOptions | None = None,
+) -> tuple[ValueRange, ValueRange]:
+    """
+    Return the (cold, heat) value ranges spanning every GeoTIFF.
+
+    Rasters are read one at a time, using the same land mask as rendering.
+    """
+
+    if options is None:
+        options = RenderOptions()
+
+    cold_ranges, heat_ranges = [], []
+
+    for tif_path in tif_paths:
+
+        cold_layer, heat_layer, _ = _load_layers(tif_path, options)
+
+        for layer, ranges in ((cold_layer, cold_ranges), (heat_layer, heat_ranges)):
+            if np.isfinite(layer.values).any():
+                ranges.append(
+                    ValueRange(float(np.nanmin(layer.values)), float(np.nanmax(layer.values)))
+                )
+
+    if not cold_ranges or not heat_ranges:
+        raise ValueError("No valid pixels to compute global value ranges")
+
+    return _spanning_range(cold_ranges), _spanning_range(heat_ranges)
+
+
+def _spanning_range(ranges: Sequence[ValueRange]) -> ValueRange:
+
+    return ValueRange(min(r.vmin for r in ranges), max(r.vmax for r in ranges))
+
+
+def _load_layers(
+    tif_path: Path,
+    options: RenderOptions,
+) -> tuple[MapLayer, MapLayer, list[dict] | None]:
+    """Read the cold and heat layers, masking sea pixels when configured."""
 
     with rasterio.open(tif_path) as src:
 
@@ -150,8 +218,7 @@ def render_pngs(
         metric_units="days",
     )
 
-    _render_map(cold_layer, cold, options, land_geometries=land_geometries)
-    _render_map(heat_layer, heat, options, land_geometries=land_geometries)
+    return cold_layer, heat_layer, land_geometries
 
 
 def _load_land_geometries(path: Path) -> list[dict]:
@@ -240,6 +307,7 @@ def _reproject_to_webmercator(
 def _write_map(
     values, lonlat_bounds, colors: Sequence[str], png_path: Path, json_path: Path,
     column: str, units: str, vmin: float, vmax: float, raw_min: float, raw_max: float,
+    local_min: float, local_max: float,
     png_scale: int = 1, discrete_colors: bool = False,
 ) -> None:
     """
@@ -275,6 +343,8 @@ def _write_map(
         vmax=vmax,
         raw_min=raw_min,
         raw_max=raw_max,
+        local_min=local_min,
+        local_max=local_max,
     )
 
 
@@ -284,11 +354,14 @@ def _render_map(
     output: MapOutput,
     options: RenderOptions,
     land_geometries=None,
+    value_range: ValueRange | None = None,
 ) -> None:
     """
-    Reproject a layer, 
-    optionally mask sea pixels, 
+    Reproject a layer,
+    optionally mask sea pixels,
     and write its PNG and JSON sidecar.
+
+    Colours follow value_range when given, otherwise the layer's own range.
     """
 
     png_path, json_path, colors = output.png_path, output.json_path, output.colors
@@ -302,8 +375,17 @@ def _render_map(
 
     # np.nanmin() returns the smallest value in an array while ignoring NaN values.
     # NOTE: the original docstring is not human-readable
-    raw_min, raw_max = float(np.nanmin(layer.values)), float(np.nanmax(layer.values))
-    print(f"{png_path.name}: min {raw_min:.1f} (lightest), max {raw_max:.1f} (darkest)")
+    local_min, local_max = float(np.nanmin(layer.values)), float(np.nanmax(layer.values))
+
+    if value_range is None:
+        raw_min, raw_max = local_min, local_max
+    else:
+        raw_min, raw_max = value_range.vmin, value_range.vmax
+
+    print(
+        f"{png_path.name}: min {local_min:.1f}, max {local_max:.1f}; "
+        f"colour scale {raw_min:.1f} (lightest) to {raw_max:.1f} (darkest)"
+    )
 
     vmin, vmax = raw_min, raw_max
 
@@ -320,6 +402,7 @@ def _render_map(
     _write_map(
         projected, lonlat_bounds, colors, png_path, json_path,
         metric_band_name, metric_units, vmin, vmax, raw_min, raw_max,
+        local_min, local_max,
         png_scale=png_scale, discrete_colors=discrete_colors,
     )
 

@@ -20,11 +20,16 @@ def write_sidecar(
     vmax: float,
     raw_min: float,
     raw_max: float,
+    local_min: float,
+    local_max: float,
 ) -> None:
     """Describe the PNG placement, metric range, colours and missing pixels.
 
     Use the same RGB palette and display range as the PNG so that the
     sidecar's colour-map entries describe the rendered image consistently.
+
+    raw_min and raw_max span every region; local_min and local_max describe
+    this region alone.
     """
 
     west, south, east, north = (round(float(v), 6) for v in lonlat_bounds)
@@ -40,6 +45,8 @@ def write_sidecar(
             "units": units,
             "raw_min": round(raw_min, 6),
             "raw_max": round(raw_max, 6),
+            "local_min": round(local_min, 6),
+            "local_max": round(local_max, 6),
         },
         "nodata": {"palette_index": NODATA_INDEX, "alpha": 0},
         "color_map": [

@@ -25,7 +25,9 @@
     "max": 297.0,
     "units": "days",
     "raw_min": 0.0,
-    "raw_max": 297.0
+    "raw_max": 297.0,
+    "local_min": 0.0,
+    "local_max": 297.0
   },
   "nodata": {
     "palette_index": 255,
