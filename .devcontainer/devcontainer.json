@@ -1,0 +1,17 @@
+{
+  "name": "thermal-comfort-indices",
+  "build": {
+    "dockerfile": "${env:HOME}/.claude/Dockerfile.claude"
+  },
+  "workspaceMount": "source=/home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices,target=/home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices,type=bind",
+  "workspaceFolder": "/home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices",
+  "mounts": [
+    "source=claude-cache,target=/home/node/.claude,type=volume"
+  ],
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "extensions": ["anthropic.claude-code"]
+    }
+  }
+}

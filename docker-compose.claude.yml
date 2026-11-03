@@ -1,0 +1,14 @@
+services:
+  claude:
+    build:
+      context: ${HOME}/.claude
+      dockerfile: Dockerfile.claude
+    working_dir: /home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices
+    volumes:
+      - claude-cache:/home/node/.claude
+      - /home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices:/home/karol/Documents/Programming/Data_Engineering/thermal_comfort_indices
+    stdin_open: true
+    tty: true
+
+volumes:
+  claude-cache:

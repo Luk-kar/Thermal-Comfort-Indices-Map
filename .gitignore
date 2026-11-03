@@ -6,6 +6,10 @@ __pycache__/*
 __pycache__
 *.pyc
 !README.md
-*.md
 output/preview/*
 downloads/*
+.claude/*
+.pytest_cache
+!.claude/hooks
+!.claude/settings.json
+!.claude/rules/python/*

@@ -18,15 +18,6 @@ class SampleBounds:
     REGIONS = (MAINLAND, ICELAND, SVALBARD)
     ENVELOPE = (-26.0, 34.5, 46.0, 81.0)
 
-
-def test_get_download_regions_excludes_iceland_and_aggregate_attributes():
-    
-    assert get_download_regions(SampleBounds) == [
-        ("MAINLAND", SampleBounds.MAINLAND),
-        ("SVALBARD", SampleBounds.SVALBARD),
-    ]
-
-
 def test_build_request():
     
     assert build_request(

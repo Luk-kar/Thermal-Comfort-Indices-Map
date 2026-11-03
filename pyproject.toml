@@ -17,3 +17,59 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
+python_files = ["test_*.py", "*.unit.test.py"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
+select = [
+    "B006",     # mutable default arguments
+    "B904",     # exception chaining inside except blocks
+    "BLE001",   # blind except
+    "C901",     # cyclomatic complexity
+    "D100",     # module docstrings
+    "D401",     # imperative docstrings
+    "E",        # PEP 8 errors, including line length
+    "F",        # pyflakes, including wildcard imports
+    "I",        # import order
+    "N",        # naming
+    "PLR0913",  # parameter count
+    "PLR0915",  # statements per function, approximates the function length limit
+    "PLR1702",  # nesting depth
+    "PLW0603",  # global statement
+    "Q",        # double quotes
+    "S110",     # silently discarded exceptions
+    "UP",       # modern syntax, including built-in generics and unions
+    "W",        # PEP 8 warnings
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["thermal_dataset_download", "utci_map"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 5
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-nested-blocks = 2
+max-statements = 30
+
+[tool.mypy]
+python_version = "3.12"
+files = ["utci_map", "tests", "thermal_dataset_download.py", "thermal_dataset_preview.py"]
+explicit_package_bases = true
+ignore_missing_imports = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "utci_map.*.tests.*", "utci_map.source.conftest"]
+disallow_untyped_defs = false
