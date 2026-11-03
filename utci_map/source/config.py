@@ -34,6 +34,16 @@ HEAT_JSON_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.json"
 
 COASTLINE_PATH = Path("gisco") / "COAS_RG_10M_2016_4326.geojson"
 
+# Each run logs to its own file, e.g. logs/utci_map/2026-11-03_17-42-05.log.
+LOGGER_NAME = "utci_map"
+LOG_DIR = Path("logs") / "utci_map"
+LOG_FILE_TIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
+
+# I/O beyond these limits is logged as a WARNING.
+LARGE_IO_WARNING_BYTES = 500 * 1024**2  # one file, or everything extracted from one archive
+EXTRACTED_FILES_WARNING_COUNT = 200  # files extracted from one region archive
+SLOW_IO_WARNING_SECONDS = 60.0  # one read, write or extraction
+
 
 COLD_COLORS = (
     "#daccc9",  # pale warm gray (light taupe) - fewest days; shared start color

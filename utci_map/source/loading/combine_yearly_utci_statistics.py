@@ -5,6 +5,7 @@ Ensure years are unique, required years are present, and all input files
 describe the same spatial grid and use consistent units for UTCI extremes.
 """
 
+import logging
 from collections import Counter
 from pathlib import Path
 
@@ -13,6 +14,8 @@ import numpy as np
 from utci_map.source.loading.netcdf_reader import read_yearly_file, transforms_match
 from utci_map.source.models import FileRecords, YearlyStats
 from utci_map.source.schema import SELECTED_NETCDF_FIELDS
+
+_LOGGER = logging.getLogger(__name__)
 
 YearRecord = tuple[int, dict[str, np.ndarray]]  # (year, {field name: (height, width) array})
 
@@ -30,7 +33,7 @@ def load_yearly_statistics(
     Raise FileNotFoundError if there are none, and ValueError if files disagree on grid
     or peak units, a year appears twice, or no year falls in the period. A year missing
     from the period raises ValueError if require_complete_period is set, and only
-    prints a warning otherwise.
+    logs a warning otherwise.
     """
     records, reference = _collect_yearly_records(data_dir)
     selected = [record for record in records if start_year <= record[0] <= end_year]
@@ -100,7 +103,7 @@ def _validate_period_years(
         return
     if require_complete_period:
         raise ValueError(f"Missing years: {missing_years}")
-    print(f"WARNING: missing years {missing_years}; using {len(years)} years")
+    _LOGGER.warning("Missing years %s; using %d years", missing_years, len(years))
 
 
 def _assemble_yearly_statistics(records: list[YearRecord], reference: FileRecords) -> YearlyStats:

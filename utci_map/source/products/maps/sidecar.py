@@ -1,6 +1,7 @@
 """Write JSON metadata accompanying cold- and heat-day PNG maps."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,9 @@ import numpy as np
 
 from utci_map.source.config import COLOR_MAP_STEP, MAX_INDEX, NODATA_INDEX
 from utci_map.source.products.maps.models import Bounds, ImagePlacement, MetricScale
+from utci_map.source.runlog.file_io import logged_file_io
+
+_LOGGER = logging.getLogger(__name__)
 
 COORDINATE_DECIMALS = 6
 METRIC_DECIMALS = 6
@@ -37,8 +41,11 @@ def write_sidecar(
         "nodata": {"palette_index": NODATA_INDEX, "alpha": 0},
         "color_map": _color_map(rgb, metric.vmin, metric.vmax),
     }
+    text = json.dumps(sidecar, indent=2, allow_nan=False) + "\n"
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(sidecar, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+    with logged_file_io(_LOGGER, "Wrote", json_path):
+        json_path.write_text(text, encoding="utf-8")
 
 
 def _corner_coordinates(lonlat_bounds: Bounds) -> list[list[float]]:

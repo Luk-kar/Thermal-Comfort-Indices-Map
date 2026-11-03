@@ -1,5 +1,6 @@
 """Write the summary GeoTIFF and look up bands by description."""
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -9,6 +10,9 @@ from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
 from utci_map.source.models import Band
+from utci_map.source.runlog.file_io import logged_file_io
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def write_geotiff(
@@ -25,20 +29,23 @@ def write_geotiff(
     path.parent.mkdir(parents=True, exist_ok=True)
     height, width = bands[0][1].shape
 
-    with rasterio.open(
-        path,
-        "w",
-        driver="GTiff",
-        height=height,
-        width=width,
-        count=len(bands),
-        dtype="float32",
-        crs="EPSG:4326",
-        transform=transform,
-        nodata=np.nan,
-        compress="deflate",
-        predictor=3,
-    ) as dst:
+    with (
+        logged_file_io(_LOGGER, "Wrote", path),
+        rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=len(bands),
+            dtype="float32",
+            crs="EPSG:4326",
+            transform=transform,
+            nodata=np.nan,
+            compress="deflate",
+            predictor=3,
+        ) as dst,
+    ):
         for index, (name, values, units) in enumerate(bands, start=1):
             dst.write(values.astype("float32"), index)
             dst.set_band_description(index, name)

@@ -1,5 +1,6 @@
 """Read and validate the variables and time steps of one NetCDF file."""
 
+import logging
 import math
 import re
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,10 @@ from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
 from utci_map.source.models import FieldRecords, FileRecords
+from utci_map.source.runlog.file_io import logged_file_io
 from utci_map.source.schema import PEAK_MAX, PEAK_MIN, SELECTED_NETCDF_FIELDS
+
+_LOGGER = logging.getLogger(__name__)
 
 # Date part of the time units, e.g. "2015-01-01" or "2015-1-1".
 _DATE_PATTERN = r"(\d{4})-(\d{1,2})-(\d{1,2})"
@@ -38,6 +42,22 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     Raise KeyError if it has the peak fields but lacks another selected field,
     and ValueError if a field has an unsupported grid, time axis or scaling.
     """
+    with logged_file_io(_LOGGER, "Read", nc_file):
+        records = _read_yearly_file(nc_file)
+
+    if records is None:
+        _LOGGER.info("Skipped %s: no yearly peak fields", nc_file.name)
+
+    return records
+
+
+def transforms_match(a: Affine, b: Affine) -> bool:
+    """Check that two rasters share a grid, tolerating tiny floating-point differences."""
+    return bool(np.allclose(tuple(a)[:6], tuple(b)[:6], rtol=0.0, atol=TRANSFORM_TOLERANCE))
+
+
+def _read_yearly_file(nc_file: Path) -> FileRecords | None:
+    """Read the selected fields, or return None for a file without yearly peaks."""
     uris = _field_uris(nc_file)
 
     if PEAK_MAX not in uris or PEAK_MIN not in uris:
@@ -48,11 +68,6 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
         raise KeyError(f"{nc_file.name} lacks fields: {missing}")
 
     return _read_selected_fields(uris, nc_file)
-
-
-def transforms_match(a: Affine, b: Affine) -> bool:
-    """Check that two rasters share a grid, tolerating tiny floating-point differences."""
-    return bool(np.allclose(tuple(a)[:6], tuple(b)[:6], rtol=0.0, atol=TRANSFORM_TOLERANCE))
 
 
 def _field_uris(nc_file: Path) -> dict[str, str]:

@@ -1,5 +1,6 @@
 """Render the cold and heat total bands of a summary GeoTIFF as indexed PNGs with sidecars."""
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -24,7 +25,10 @@ from utci_map.source.products.maps.models import (
 from utci_map.source.products.maps.palette import palette_rgb, to_indices
 from utci_map.source.products.maps.reprojection import reproject_to_webmercator
 from utci_map.source.products.maps.sidecar import write_sidecar
+from utci_map.source.runlog.file_io import logged_file_io
 from utci_map.source.schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MAX_BAND_NAMES, MIN_BAND_NAMES
+
+_LOGGER = logging.getLogger(__name__)
 
 DAY_UNITS = "days"
 REQUIRED_BANDS = [*MIN_BAND_NAMES, *MAX_BAND_NAMES, COLD_TOTAL_BAND, HEAT_TOTAL_BAND]
@@ -113,7 +117,7 @@ def _load_layers(
 
 def _read_total_bands(tif_path: Path) -> tuple[np.ndarray, np.ndarray, RasterGrid]:
     """Read the cold and heat total bands as float64 (height, width) arrays and their grid."""
-    with rasterio.open(tif_path) as src:
+    with logged_file_io(_LOGGER, "Read", tif_path), rasterio.open(tif_path) as src:
         index = band_indices(src, REQUIRED_BANDS)
         if src.crs is None:
             raise ValueError(f"{tif_path} has no CRS")
@@ -163,14 +167,22 @@ def _metric_scale(layer: MapLayer, value_range: ValueRange | None, image_name: s
     """Choose the display range, widening an empty one so the map renders in the lightest color."""
     local = ValueRange(float(np.nanmin(layer.values)), float(np.nanmax(layer.values)))
     raw = value_range or local
-    print(
-        f"{image_name}: min {local.vmin:.1f}, max {local.vmax:.1f}; "
-        f"color scale {raw.vmin:.1f} (lightest) to {raw.vmax:.1f} (darkest)"
+    _LOGGER.info(
+        "%s: min %.1f, max %.1f; color scale %.1f (lightest) to %.1f (darkest)",
+        image_name,
+        local.vmin,
+        local.vmax,
+        raw.vmin,
+        raw.vmax,
     )
 
     vmax = raw.vmax
     if raw.vmax == raw.vmin:
-        print(f"  All pixels equal ({raw.vmin:.1f}); the whole map will be the lightest color.")
+        _LOGGER.info(
+            "%s: all pixels equal %.1f; the whole map will be the lightest color",
+            image_name,
+            raw.vmin,
+        )
         vmax = raw.vmin + 1.0
 
     return MetricScale(
@@ -200,4 +212,6 @@ def _write_png(
 
     png_path.parent.mkdir(parents=True, exist_ok=True)
     alpha = bytes([255] * NODATA_INDEX + [0])
-    image.save(png_path, transparency=alpha)
+
+    with logged_file_io(_LOGGER, "Wrote", png_path):
+        image.save(png_path, transparency=alpha)

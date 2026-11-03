@@ -79,6 +79,7 @@ Several values are duplicated with nothing enforcing that they match:
 
 ## Repository notes
 
+- `python -m utci_map` logs to the terminal and to a new file per run, `logs/utci_map/<date>_<time>.log` (ignored by git). It records every file read or written with its size, and warns when a file, an extraction or a step exceeds the limits in `utci_map/source/config.py`. Modules log through `logging.getLogger(__name__)`; only `__main__.py` configures handlers.
 - Only the `.name` of the output paths in `config.py` is used; the real files live in `output/map/<region>/`. The five files directly in `output/` are not used by the pipeline or the frontend, and appear to predate the regional layout.
 - `output/map/<region>/` is committed because the frontend reads it directly. Regenerate and commit it when pipeline changes affect the outputs. `downloads/` and `*.zip` are ignored, so a regeneration depends on local archives.
 - Python tests sit next to the code in `tests/` directories, and downloader tests are in the root `tests/`. Fixtures in `utci_map/source/conftest.py` build synthetic data and real temporary NetCDF files, and NetCDF tests skip if GDAL lacks the netCDF driver.

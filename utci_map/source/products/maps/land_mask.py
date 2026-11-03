@@ -1,6 +1,7 @@
 """Load GISCO land polygons and turn them into per-pixel land masks."""
 
 import json
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Literal
@@ -11,6 +12,9 @@ from rasterio.features import geometry_mask
 from rasterio.warp import transform_geom
 
 from utci_map.source.products.maps.models import WGS84_CRS, Geometry, RasterGrid
+from utci_map.source.runlog.file_io import logged_file_io
+
+_LOGGER = logging.getLogger(__name__)
 
 # GeoJSON positions are (longitude, latitude), optionally followed by a height.
 Position = Annotated[list[float], Field(min_length=2)]
@@ -49,7 +53,7 @@ def load_land_geometries(path: Path) -> list[Geometry]:
     Raise ValueError naming the file unless it holds at least one feature and every
     feature has a Polygon or MultiPolygon geometry with numeric coordinates.
     """
-    with path.open(encoding="utf-8") as source:
+    with logged_file_io(_LOGGER, "Read", path), path.open(encoding="utf-8") as source:
         collection = json.load(source)
 
     try:

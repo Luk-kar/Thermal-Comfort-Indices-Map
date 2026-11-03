@@ -6,6 +6,7 @@ https://www.ipma.pt/en/enciclopedia/amb.atmosfera/index.bioclima/index.html?page
 """
 
 import calendar
+import logging
 from collections.abc import Sequence
 from typing import Literal
 
@@ -24,6 +25,8 @@ from utci_map.source.schema import (
     PEAK_MAX,
     PEAK_MIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 Direction = Literal["above", "below"]
 
@@ -195,7 +198,12 @@ def _infer_kelvin_from_range(hot: np.ndarray, cold: np.ndarray) -> bool:
     else:
         raise ValueError(f"Ambiguous peak value range {low:.2f}..{high:.2f}")
 
-    print(f"No units attribute; inferred {'Kelvin' if is_kelvin else 'Celsius'}.")
+    _LOGGER.warning(
+        "Yearly peaks declare no units; inferred %s from values %.2f..%.2f",
+        "Kelvin" if is_kelvin else "Celsius",
+        low,
+        high,
+    )
     return is_kelvin
 
 
