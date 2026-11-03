@@ -1,3 +1,9 @@
+"""Check that load_yearly_statistics combines NetCDF files into one consistent dataset.
+
+Cover year filtering and ordering, missing and duplicate years, and rejection of files
+with mismatched grids or peak units.
+"""
+
 import numpy as np
 import pytest
 
@@ -15,10 +21,11 @@ def test_combines_sorts_and_filters_records(netcdf_factory, tmp_path):
 
     Check the combined array shapes, peak units, and missing pixels.
     """
-
     netcdf_factory("a.nc", years=(2018,))
     netcdf_factory("b.nc", years=(2015, 2016, 2017))
-    result = load_yearly_statistics(tmp_path, 2016, 2018, True)
+    result = load_yearly_statistics(
+        tmp_path, start_year=2016, end_year=2018, require_complete_period=True
+    )
 
     np.testing.assert_array_equal(result.years, [2016, 2017, 2018])
 
@@ -32,25 +39,28 @@ def test_combines_sorts_and_filters_records(netcdf_factory, tmp_path):
 
 
 def test_empty_directory_raises_file_not_found(tmp_path):
-
     with pytest.raises(FileNotFoundError):
-        load_yearly_statistics(tmp_path, 2016, 2017, True)
+        load_yearly_statistics(
+            tmp_path, start_year=2016, end_year=2017, require_complete_period=True
+        )
 
 
 def test_no_records_in_period_raises_value_error(netcdf_factory, tmp_path):
-
     netcdf_factory("old.nc", years=(2015,))
     with pytest.raises(ValueError):
-        load_yearly_statistics(tmp_path, 2016, 2017, True)
+        load_yearly_statistics(
+            tmp_path, start_year=2016, end_year=2017, require_complete_period=True
+        )
 
 
 def test_duplicate_years_raised_error(netcdf_factory, tmp_path):
-
     netcdf_factory("a.nc", years=(2016,))
     netcdf_factory("b.nc", years=(2016,))
 
     with pytest.raises(ValueError):
-        load_yearly_statistics(tmp_path, 2016, 2016, True)
+        load_yearly_statistics(
+            tmp_path, start_year=2016, end_year=2016, require_complete_period=True
+        )
 
 
 @pytest.mark.parametrize("complete", [True, False])
@@ -62,15 +72,18 @@ def test_missing_year_policy(netcdf_factory, tmp_path, complete):
     ValueError when a complete period is required; otherwise, expect
     a dataset containing only the available years, 2016 and 2018.
     """
-
     netcdf_factory("partial.nc", years=(2016, 2018))
 
     if complete:
         with pytest.raises(ValueError):
-            load_yearly_statistics(tmp_path, 2016, 2018, complete)
+            load_yearly_statistics(
+                tmp_path, start_year=2016, end_year=2018, require_complete_period=complete
+            )
 
     else:
-        result = load_yearly_statistics(tmp_path, 2016, 2018, complete)
+        result = load_yearly_statistics(
+            tmp_path, start_year=2016, end_year=2018, require_complete_period=complete
+        )
         np.testing.assert_array_equal(result.years, [2016, 2018])
 
 
@@ -83,9 +96,10 @@ def test_inconsistent_files_are_rejected(netcdf_factory, tmp_path, options):
     a shifted western grid boundary or Kelvin peak units instead of Celsius.
     Expect a ValueError rather than combining inconsistent yearly records.
     """
-
     netcdf_factory("a.nc", years=(2016,))
     netcdf_factory("b.nc", years=(2017,), **options)
 
     with pytest.raises(ValueError):
-        load_yearly_statistics(tmp_path, 2016, 2017, True)
+        load_yearly_statistics(
+            tmp_path, start_year=2016, end_year=2017, require_complete_period=True
+        )

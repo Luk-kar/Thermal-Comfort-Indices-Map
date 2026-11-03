@@ -82,9 +82,9 @@ def extract_region(archive_path, data_dir):
 def load_data(data_dir):
     annual = load_yearly_statistics(
         data_dir,
-        config.START_YEAR,
-        config.END_YEAR,
-        config.REQUIRE_COMPLETE_PERIOD,
+        start_year=config.START_YEAR,
+        end_year=config.END_YEAR,
+        require_complete_period=config.REQUIRE_COMPLETE_PERIOD,
     )
 
     print(f"Years used ({annual.years.size}): {annual.years.tolist()}")

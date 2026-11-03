@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("rasterio")
-from utci_map.source.computation.thermal_stress_summary import build_bands  # noqa: E402
+from utci_map.source.computation.thermal_stress_summary import build_bands
 
 EXPECTED = [
     ("days_daily_max_26_32", 4, "days"),

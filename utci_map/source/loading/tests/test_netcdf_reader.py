@@ -1,8 +1,15 @@
+"""Check that read_yearly_file reads one NetCDF file into validated yearly records.
+
+Cover field values in physical units, peak units, grid placement, skipped non-yearly files,
+and rejection of incomplete or unsupported files.
+"""
+
 import numpy as np
 import pytest
 
 pytest.importorskip("rasterio")
 from rasterio.transform import from_origin
+
 from utci_map.source.loading.netcdf_reader import read_yearly_file
 
 
@@ -25,12 +32,19 @@ def test_reads_years_fields_values_units_and_grid(netcdf_factory):
     np.testing.assert_allclose(tuple(result.transform), tuple(from_origin(-24, 67, 0.25, 0.25)))
     assert result.peak_units == {"utci_yearly_max": "degC", "utci_yearly_min": "degC"}
 
-    expected = {"utci_yearly_max": 30, "utci_yearly_min": -20,
-                "utci_days_above_26_daily_max": 10, "utci_days_above_32_daily_max": 6,
-                "utci_days_above_38_daily_max": 3, "utci_days_above_46_daily_max": 1,
-                "utci_days_below_-40_daily_min": 1, "utci_days_below_-27_daily_min": 3,
-                "utci_days_below_-13_daily_min": 6, "utci_days_below_0_daily_min": 10,
-                "utci_days_below_9_daily_min": 15}
+    expected = {
+        "utci_yearly_max": 30,
+        "utci_yearly_min": -20,
+        "utci_days_above_26_daily_max": 10,
+        "utci_days_above_32_daily_max": 6,
+        "utci_days_above_38_daily_max": 3,
+        "utci_days_above_46_daily_max": 1,
+        "utci_days_below_-40_daily_min": 1,
+        "utci_days_below_-27_daily_min": 3,
+        "utci_days_below_-13_daily_min": 6,
+        "utci_days_below_0_daily_min": 10,
+        "utci_days_below_9_daily_min": 15,
+    }
     assert set(result.arrays) == set(expected)
 
     for name, base in expected.items():
@@ -42,7 +56,7 @@ def test_reads_years_fields_values_units_and_grid(netcdf_factory):
 
 
 def test_reads_yearly_extremes_in_physical_units(netcdf_factory):
-
+    """Apply scale 0.5 and offset 200 to packed peaks, so stored 30 and -20 become 215 and 190."""
     path = netcdf_factory("packed.nc", peak_scale=0.5, peak_offset=200, units="K")
     result = read_yearly_file(path)
 
@@ -52,13 +66,11 @@ def test_reads_yearly_extremes_in_physical_units(netcdf_factory):
 
 
 def test_file_without_yearly_extremes_fields_is_not_yearly_statistics(netcdf_factory):
-
     path = netcdf_factory("other.nc", missing=("utci_yearly_max", "utci_yearly_min"))
     assert read_yearly_file(path) is None
 
 
 def test_missing_selected_field_raises_key_error(netcdf_factory):
-
     path = netcdf_factory("incomplete.nc", missing=("utci_days_above_26_daily_max",))
     with pytest.raises(KeyError):
         read_yearly_file(path)
@@ -66,7 +78,7 @@ def test_missing_selected_field_raises_key_error(netcdf_factory):
 
 @pytest.mark.parametrize("options", [{"calendar": "360_day"}, {"peak_scale": -1}])
 def test_unsupported_input_raises_value_error(netcdf_factory, options):
-
+    """Reject a non-Gregorian calendar and a negative scale factor."""
     path = netcdf_factory("invalid.nc", **options)
     with pytest.raises(ValueError):
         read_yearly_file(path)
