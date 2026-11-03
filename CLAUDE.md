@@ -74,7 +74,7 @@ Several values are duplicated with nothing enforcing that they match:
 
 - **Regions:** defined by `EuropeBounds` in `thermal_dataset_download.py` and must also be added to `REGIONS` in `frontend/config.js`, using the lowercased attribute name. `get_download_regions` only picks up attributes whose bounds are also in `EuropeBounds.REGIONS`.
 - **Years:** set in both `thermal_dataset_download.py` and `utci_map/source/config.py`. The years in `config.py` determine which archive filename `utci_map` looks for.
-- **Stress brackets:** `schema.py` derives field and band names from the brackets, but `_yearly_days_by_stress_category` hard-codes the thresholds and `popup/content.js` hard-codes labels for each band name.
+- **Stress brackets:** `schema.py` derives field and band names from the brackets, but `popup/content.js` hard-codes labels for each band name.
 - **Preview script:** `thermal_dataset_preview.py` is a self-contained copy of the schema, palettes and processing logic, and shares only download helpers with `utci_map`. Changes to `utci_map` do not reach it.
 
 ## Repository notes

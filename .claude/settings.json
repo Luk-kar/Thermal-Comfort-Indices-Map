@@ -118,7 +118,6 @@
       "Bash(su *)",
       "Bash(doas *)",
       "Bash(pkexec *)",
-      "Bash(bash -*c *)",
       "Bash(sh -*c *)",
       "Bash(zsh -*c *)",
       "Bash(dash -*c *)",

@@ -31,6 +31,7 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 - State each module's purpose in its docstring. Use one line for simple helpers and add detail for public functions.
 - Show non-obvious transformations with a concrete example ("E.g. ...").
 - Use comments to explain why, not to restate the code.
+- After each module's docstring is a new line
 
 ## Errors
 

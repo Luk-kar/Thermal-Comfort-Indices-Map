@@ -1,5 +1,6 @@
 services:
   claude:
+    container_name: local-claude
     build:
       context: ${HOME}/.claude
       dockerfile: Dockerfile.claude
