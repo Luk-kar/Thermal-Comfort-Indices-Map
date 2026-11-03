@@ -13,3 +13,4 @@ downloads/*
 !.claude/hooks
 !.claude/settings.json
 !.claude/rules/python/*
+.vscode

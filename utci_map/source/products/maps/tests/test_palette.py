@@ -1,14 +1,19 @@
+"""Check that palettes blend or step through the given colors and reject malformed ones."""
+
 import numpy as np
 import pytest
 
 from utci_map.source.products.maps.palette import palette_rgb
 
 
-@pytest.mark.parametrize("colors", [
-    ["#000000", "#ffffff"], ("#000000", "#ffffff"),
-])
-def test_continuous_palette_contains_expected_colours(colors):
-
+@pytest.mark.parametrize(
+    "colors",
+    [
+        ["#000000", "#ffffff"],
+        ("#000000", "#ffffff"),
+    ],
+)
+def test_continuous_palette_contains_expected_colors(colors):
     result = palette_rgb(colors)
 
     assert result.shape == (255, 3)
@@ -19,12 +24,12 @@ def test_continuous_palette_contains_expected_colours(colors):
     assert np.all(np.diff(result.astype(int), axis=0) >= 0)
 
 
-def test_discrete_palette_uses_only_supplied_colours():
+def test_discrete_palette_uses_only_supplied_colors():
     """
-    Check that a discrete palette preserves the supplied colour steps.
+    Check that a discrete palette preserves the supplied color steps.
 
-    Use black and white as the input colours and verify that every palette
-    entry is one of those colours, with no intermediate shades of grey.
+    Use black and white as the input colors and verify that every palette
+    entry is one of those colors, with no intermediate shades of grey.
     Expect the first 127 entries to be black and the remaining 128 white.
     """
 
@@ -35,14 +40,12 @@ def test_discrete_palette_uses_only_supplied_colours():
 
 
 @pytest.mark.parametrize("discrete", [False, True])
-def test_single_colour_palette_is_uniform(discrete):
-
+def test_single_color_palette_is_uniform(discrete):
     result = palette_rgb(["#123456"], discrete_colors=discrete)
     np.testing.assert_array_equal(result, np.tile([18, 52, 86], (255, 1)))
 
 
-@pytest.mark.parametrize("colour", ["red", "#fff", "ffffff", "#gg0000"])
-def test_invalid_colour_raises_value_error(colour):
-
+@pytest.mark.parametrize("color", ["red", "#fff", "ffffff", "#gg0000"])
+def test_invalid_color_raises_value_error(color):
     with pytest.raises(ValueError):
-        palette_rgb([colour])
+        palette_rgb([color])

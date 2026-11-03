@@ -11,7 +11,7 @@ from typing import Literal
 
 import numpy as np
 
-from utci_map.source.models import YearlyStats
+from utci_map.source.models import Band, YearlyStats
 from utci_map.source.schema import (
     ABOVE_THRESHOLDS,
     BELOW_THRESHOLDS,
@@ -25,7 +25,6 @@ from utci_map.source.schema import (
     PEAK_MIN,
 )
 
-Band = tuple[str, np.ndarray, str]  # (name, values with shape (height, width), units)
 Direction = Literal["above", "below"]
 
 KELVIN_OFFSET = 273.15

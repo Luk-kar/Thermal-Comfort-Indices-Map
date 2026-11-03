@@ -1,9 +1,12 @@
-"""Data contracts between loading and computation stages."""
+"""Data contracts between the loading, computation and output stages."""
 
 from dataclasses import dataclass
 
 import numpy as np
 from rasterio.transform import Affine
+
+Band = tuple[str, np.ndarray, str]  # (name, values with shape (height, width), units)
+
 
 @dataclass(frozen=True)
 class FileRecords:
@@ -11,15 +14,16 @@ class FileRecords:
     Hold yearly statistics read from a single input NetCDF file.
 
     Populated by the selected UTCI fields.
-    Years come from the NetCDF time coordinates; 
-    arrays contain values with missing data masked as 
-    NaN and scale/offset applied. 
+    Years come from the NetCDF time coordinates;
+    arrays contain values with missing data masked as
+    NaN and scale/offset applied.
     Peak units
     and grid information come from the fields' metadata.
     """
 
     years: list[int]  # e.g. [2015, 2016]
-    arrays: dict[str, list[np.ndarray]]  # e.g. {"utci_yearly_max": [array_2015, array_2016]}; each array is 2-D
+    # e.g. {"utci_yearly_max": [array_2015, array_2016]}; each array is 2-D
+    arrays: dict[str, list[np.ndarray]]
     peak_units: dict[str, str]  # e.g. {"utci_yearly_max": "K", "utci_yearly_min": "K"}
     shape: tuple[int, int]  # (height, width), e.g. (180, 360)
     transform: Affine  # e.g. Affine(0.25, 0.0, -25.0, 0.0, -0.25, 67.0)
@@ -40,7 +44,8 @@ class FieldRecords:
     arrays: list[np.ndarray]  # e.g. [array_2015, array_2016]; each array has shape (height, width)
     shape: tuple[int, int]  # (height, width), e.g. (180, 360)
     transform: Affine  # e.g. Affine(0.25, 0.0, -25.0, 0.0, -0.25, 67.0)
-    peak_unit: str | None  # e.g. "K" (kelvin) for a yearly peak field, "" if undeclared, or None for a day-count field
+    # e.g. "K" (kelvin) for a yearly peak field, "" if undeclared, or None for a day-count field
+    peak_unit: str | None
 
 
 @dataclass(frozen=True)
@@ -55,7 +60,8 @@ class YearlyStats:
     """
 
     years: np.ndarray  # e.g. np.array([2015, 2016]); shape (number_of_years,)
-    cubes: dict[str, np.ndarray]  # e.g. {"utci_yearly_max": values}; values have shape (number_of_years, height, width)
+    # e.g. {"utci_yearly_max": values}; values have shape (number_of_years, height, width)
+    cubes: dict[str, np.ndarray]
     peak_units: dict[str, str]  # e.g. {"utci_yearly_max": "K", "utci_yearly_min": "K"}
     shape: tuple[int, int]  # shared (height, width), e.g. (180, 360)
     transform: Affine  # shared grid transform, e.g. Affine(0.25, 0.0, -25.0, 0.0, -0.25, 67.0)

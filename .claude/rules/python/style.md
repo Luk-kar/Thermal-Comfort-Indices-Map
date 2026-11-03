@@ -18,6 +18,13 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 - Do not use global variables: no mutable module-level state and no objects such as clients created at import time. Pass values and dependencies in as arguments. Immutable `UPPER_SNAKE_CASE` constants are allowed.
 - Reduce excess complexity or nesting with helper functions, early returns or lookup tables. Group excess parameters into a dataclass.
 
+## Layout
+
+- Separate each logical step inside a function body with a blank line: setup, each action, and the checks or return. Don't pack several steps into one dense block.
+- In tests, put blank lines between arrange, act and assert.
+- Put a blank line after a docstring that is followed by code, and after a `with` block or loop before unrelated code.
+- Assign one value per line. Don't combine unrelated values in one tuple assignment such as `path, cold = make_input(), outputs["cold"]`.
+
 ## Naming and data
 
 - Use American English everywhere, including identifiers, docstrings, comments and messages: `color`, `normalize`, `behavior`.

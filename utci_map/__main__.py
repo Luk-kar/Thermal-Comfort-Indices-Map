@@ -15,12 +15,8 @@ from utci_map.source.loading.combine_yearly_utci_statistics import (
     load_yearly_statistics,
 )
 from utci_map.source.products.geotiff import write_geotiff
-from utci_map.source.products.maps.png_maps import (
-    MapOutput,
-    RenderOptions,
-    global_value_ranges,
-    render_pngs,
-)
+from utci_map.source.products.maps.models import MapOutput, RenderOptions
+from utci_map.source.products.maps.png_maps import global_value_ranges, render_pngs
 
 
 def main():
@@ -100,8 +96,8 @@ def create_tif(annual, tif_path):
         tif_path,
         bands,
         annual.transform,
-        config.START_YEAR,
-        config.END_YEAR,
+        start_year=config.START_YEAR,
+        end_year=config.END_YEAR,
     )
 
     print(f"Wrote {tif_path} ({len(bands)} bands)")
@@ -126,8 +122,7 @@ def create_pngs_with_sidecars(tif_path, output_dir, cold_range, heat_range, opti
             colors=tuple(config.HEAT_COLORS),
         ),
         options=options,
-        cold_range=cold_range,
-        heat_range=heat_range,
+        value_ranges=(cold_range, heat_range),
     )
 
     print(
