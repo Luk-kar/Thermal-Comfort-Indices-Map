@@ -30,6 +30,7 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 - Use American English everywhere, including identifiers, docstrings, comments and messages: `color`, `normalize`, `behavior`.
 - Define domain names and thresholds once as constants instead of repeating literals.
 - Use frozen dataclasses for structured data, and add `kw_only=True` for options objects.
+- Use Pydantic models only where mypy can't help: structured data entering the program from outside at runtime, such as JSON or GeoJSON files, API responses and config files. Turn on strict mode so values are rejected instead of silently converted. Don't use Pydantic for data built by our own code, where mypy already checks the types, or for numpy arrays, whose shape and dtype it can't check.
 - Represent missing numeric values explicitly, using NaN in arrays and NaN-aware functions. Document array shapes.
 - Use keyword arguments when a call passes several values of similar meaning.
 
