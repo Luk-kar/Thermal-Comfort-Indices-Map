@@ -28,11 +28,15 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+# Treat every folder below these as a package, so N999 and A005 check module names
+# even in folders without __init__.py (the tests/ folders).
+namespace-packages = ["utci_map", "tests"]
 
 [tool.ruff.lint]
 preview = true
 explicit-preview-rules = true
 select = [
+    "A005",     # module or package named after a standard-library module
     "B006",     # mutable default arguments
     "B904",     # exception chaining inside except blocks
     "BLE001",   # blind except
@@ -52,6 +56,14 @@ select = [
     "UP",       # modern syntax, including built-in generics and unions
     "W",        # PEP 8 warnings
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# The style guide names the internal-behavior test tier <module>.unit.test.py on purpose.
+"*.unit.test.py" = ["N999"]
+
+[tool.ruff.lint.flake8-builtins]
+# Compare each module's own name, not its full dotted path, so nested modules are checked.
+strict-checking = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["thermal_dataset_download", "utci_map"]
