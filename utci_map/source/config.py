@@ -5,13 +5,10 @@ from pathlib import Path
 DATA_DIR = Path("downloads")
 
 
+# Inclusive period; must match the years in thermal_dataset_download.py.
 START_YEAR = 2016
-
-
 END_YEAR = 2025
-
-
-REQUIRE_COMPLETE_PERIOD = True
+REQUIRE_COMPLETE_PERIOD = True  # False = warn about missing years instead of failing
 
 
 OUTPUT_DIR = Path("output") / "map"
@@ -38,35 +35,26 @@ HEAT_JSON_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.json"
 COASTLINE_PATH = Path("gisco") / "COAS_RG_10M_2016_4326.geojson"
 
 
-COLD_COLORS = [
-    "#daccc9",  # pale warm grey (light taupe) - fewest days; shared start colour
+COLD_COLORS = (
+    "#daccc9",  # pale warm gray (light taupe) - fewest days; shared start color
     "#b8d4c8",  # pale sage green / light seafoam
     "#72b6b5",  # muted teal (soft aqua)
     "#4792b1",  # steel blue
     "#0f588f",  # deep azure blue
     "#042b48",  # very dark navy - most days
-]
+)
 
-
-HEAT_COLORS = [
-    "#daccc9",  # pale warm grey (light taupe) - fewest days; shared start colour
+HEAT_COLORS = (
+    "#daccc9",  # pale warm gray (light taupe) - fewest days; shared start color
     "#fdbe9d",  # light peach (pale apricot)
     "#ef8a82",  # salmon / coral pink
     "#c8596c",  # dusty rose (raspberry)
     "#993233",  # dark brick red (burgundy) - most days
-]
-
+)
 
 DISCRETE_COLORS = False  # True = use only the palette steps, no blending
+PNG_SCALE = 1  # 1 = native size; >1 enlarges with nearest neighbor (coordinates are unaffected)
 
-
-PNG_SCALE = 1  # 1 = native size; >1 enlarges with nearest-neighbour (coordinates are unaffected)
-
-
-MAX_INDEX = 254  # palette indices 0..254 hold data; 255 is nodata
-
-
-NODATA_INDEX = 255
-
-
+MAX_INDEX = 254  # palette indices 0..254 hold data
+NODATA_INDEX = 255  # transparent palette index for missing pixels
 COLOR_MAP_STEP = 17  # spacing of the entries listed in the sidecar's "color_map"

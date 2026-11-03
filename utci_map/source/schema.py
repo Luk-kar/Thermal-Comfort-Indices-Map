@@ -1,30 +1,29 @@
 """
-Define UTCI fields, stress categories, thresholds, and band naming rules
-for the summary GeoTIFF and the cold- and heat-day PNG maps with MapLibre
-JSON sidecars.
+Define UTCI fields, stress categories, thresholds and band naming rules.
+
+These names are shared by the NetCDF loader, the summary GeoTIFF and the cold- and
+heat-day PNG maps. Field and band names are derived from the brackets, so changing
+a bracket renames them everywhere.
 """
-
-COLD_TOTAL_BAND = "days_daily_min_below_9_total"
-
-
-HEAT_TOTAL_BAND = "days_daily_max_above_26_total"
-
-
-PEAK_MAX = "utci_yearly_max"
-
-
-PEAK_MIN = "utci_yearly_min"
-
 
 INF = float("inf")
 
+Bracket = tuple[float, float]  # (lower, upper) UTCI bound in °C
+
+PEAK_MAX = "utci_yearly_max"
+PEAK_MIN = "utci_yearly_min"
+
+HEAT_BAND_PREFIX = "days_daily_max"
+COLD_BAND_PREFIX = "days_daily_min"
+
+# Heat stress is counted from the daily maximum UTCI; the last bracket is open-ended.
+MAX_BRACKETS: tuple[Bracket, ...] = ((26, 32), (32, 38), (38, 46), (46, INF))
+# Cold stress is counted from the daily minimum UTCI; the first bracket is open-ended.
+MIN_BRACKETS: tuple[Bracket, ...] = ((-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9))
+
 
 def _format_bound(value: float) -> str:
-    """
-    Format a bracket bound for 
-    band/variable names and messages
-    """
-
+    """Format a bracket bound for names and messages, e.g. 26.0 -> '26', -inf -> '-inf'."""
     if value == INF:
         return "inf"
 
@@ -34,78 +33,74 @@ def _format_bound(value: float) -> str:
     return f"{value:g}"
 
 
-MAX_BRACKETS = [(26, 32), (32, 38), (38, 46), (46, INF)]
-
-
-MIN_BRACKETS = [(-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9)]
-
-
-def _bracket_thresholds(brackets, threshold_direction):
+def _above_thresholds(brackets: tuple[Bracket, ...]) -> tuple[float, ...]:
     """
-    Cumulative-count thresholds that the brackets are built from.
+    Return the lower edge of every bracket, matching cumulative 'days above' counts.
 
-    "above": the lower edge of every bracket (the last one must be open-ended).
-    "below": the upper edge of every bracket (the first one must be open-ended).
+    E.g. ((26, 32), (32, inf)) -> (26, 32). The last bracket must be open-ended.
     """
+    _check_contiguous(brackets)
 
-    THRESHOLD_STATISTIC = {"above": "daily_max", "below": "daily_min"}
-
-    if threshold_direction not in THRESHOLD_STATISTIC:
+    lower, upper = brackets[-1]
+    if upper != INF:
         raise ValueError(
-            f"threshold_direction must be 'above' or 'below', got {threshold_direction!r}"
+            "The last 'above' bracket must be open-ended (upper bound inf), "
+            f"but it is {_format_bound(lower)} to {_format_bound(upper)}"
         )
 
-    for (_, upper_bound), (lower_bound, _) in zip(brackets, brackets[1:]):
-        if upper_bound != lower_bound:
-            raise ValueError(f"Brackets are not contiguous: {upper_bound} != {lower_bound}")
+    return tuple(lower for lower, _ in brackets)
 
-    if threshold_direction == "above":
 
-        if brackets[-1][1] != INF:
-            raise ValueError(
-                "The last 'above' bracket must be open-ended (upper bound inf), "
-                f"but its upper bound is {_format_bound(brackets[-1][1])} "
-                f"(bracket: {_format_bound(brackets[-1][0])} to {_format_bound(brackets[-1][1])})"
-            )
-        return tuple(lower_bound for lower_bound, _ in brackets)
+def _below_thresholds(brackets: tuple[Bracket, ...]) -> tuple[float, ...]:
+    """
+    Return the upper edge of every bracket, matching cumulative 'days below' counts.
 
-    if brackets[0][0] != -INF:
+    E.g. ((-inf, -40), (-40, -27)) -> (-40, -27). The first bracket must be open-ended.
+    """
+    _check_contiguous(brackets)
 
+    lower, upper = brackets[0]
+    if lower != -INF:
         raise ValueError(
             "The first 'below' bracket must be open-ended (lower bound -inf), "
-            f"but its lower bound is {_format_bound(brackets[0][0])} "
-            f"(bracket: {_format_bound(brackets[0][0])} to {_format_bound(brackets[0][1])})"
+            f"but it is {_format_bound(lower)} to {_format_bound(upper)}"
         )
 
-    return tuple(upper_bound for _, upper_bound in brackets)
+    return tuple(upper for _, upper in brackets)
 
 
-ABOVE_THRESHOLDS = _bracket_thresholds(MAX_BRACKETS, "above")  # (26, 32, 38, 46)
+def _check_contiguous(brackets: tuple[Bracket, ...]) -> None:
+    """Reject brackets with gaps or overlaps between neighbors."""
+    for (_, upper), (lower, _) in zip(brackets, brackets[1:]):
+        if upper != lower:
+            raise ValueError(f"Brackets are not contiguous: {upper} != {lower}")
 
 
-BELOW_THRESHOLDS = _bracket_thresholds(MIN_BRACKETS, "below")  # (-40, -27, -13, 0, 9)
-
-
-def _build_band_names(prefix: str, brackets) -> list[str]:
+def _band_names(prefix: str, brackets: tuple[Bracket, ...]) -> tuple[str, ...]:
     """
-    Build one band name per bracket, 
-    e.g. 'days_daily_max_26_32'.
+    Build one band name per bracket.
+
+    E.g. prefix "days_daily_max" and bracket (26, 32) -> "days_daily_max_26_32".
     """
-
-    return [
-        f"{prefix}_{_format_bound(lower_bound)}_{_format_bound(upper_bound)}"
-        for lower_bound, upper_bound in brackets
-    ]
+    return tuple(
+        f"{prefix}_{_format_bound(lower)}_{_format_bound(upper)}" for lower, upper in brackets
+    )
 
 
-MAX_BAND_NAMES = _build_band_names("days_daily_max", MAX_BRACKETS)
+ABOVE_THRESHOLDS = _above_thresholds(MAX_BRACKETS)  # (26, 32, 38, 46)
+BELOW_THRESHOLDS = _below_thresholds(MIN_BRACKETS)  # (-40, -27, -13, 0, 9)
 
+MAX_BAND_NAMES = _band_names(HEAT_BAND_PREFIX, MAX_BRACKETS)  # e.g. "days_daily_max_26_32"
+MIN_BAND_NAMES = _band_names(COLD_BAND_PREFIX, MIN_BRACKETS)  # e.g. "days_daily_min_0_9"
 
-MIN_BAND_NAMES = _build_band_names("days_daily_min", MIN_BRACKETS)
+# Days in any heat or cold category, e.g. "days_daily_max_above_26_total".
+HEAT_TOTAL_BAND = f"{HEAT_BAND_PREFIX}_above_{_format_bound(ABOVE_THRESHOLDS[0])}_total"
+COLD_TOTAL_BAND = f"{COLD_BAND_PREFIX}_below_{_format_bound(BELOW_THRESHOLDS[-1])}_total"
 
-
+# The NetCDF variables to read: yearly peaks plus one cumulative day count per threshold.
 SELECTED_NETCDF_FIELDS = (
-    [PEAK_MAX, PEAK_MIN]
-    + [f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS]
-    + [f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS]
+    PEAK_MAX,
+    PEAK_MIN,
+    *(f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS),
+    *(f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS),
 )

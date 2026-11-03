@@ -114,12 +114,12 @@ def create_pngs_with_sidecars(tif_path, output_dir, cold_range, heat_range, opti
         cold=MapOutput(
             png_path=cold_png_path,
             json_path=cold_json_path,
-            colors=tuple(config.COLD_COLORS),
+            colors=config.COLD_COLORS,
         ),
         heat=MapOutput(
             png_path=heat_png_path,
             json_path=heat_json_path,
-            colors=tuple(config.HEAT_COLORS),
+            colors=config.HEAT_COLORS,
         ),
         options=options,
         value_ranges=(cold_range, heat_range),

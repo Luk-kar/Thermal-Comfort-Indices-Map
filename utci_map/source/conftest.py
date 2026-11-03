@@ -1,45 +1,59 @@
 """Small deterministic inputs shared by public-entry-point tests."""
 
+from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
 import pytest
 
+GRID_SIZE = 4
+PIXEL_DEGREES = 0.25
+NORTH = 67.0
+WEST = -24.0
+FILL_VALUE = -9999
+
+# Value of each field in the first year; later years add 1, except as noted in yearly_statistics.
+PEAK_BASE_VALUES = {"utci_yearly_max": 30, "utci_yearly_min": -20}
+ABOVE_BASE_COUNTS = {26: 10, 32: 6, 38: 3, 46: 1}
+BELOW_BASE_COUNTS = {-40: 1, -27: 3, -13: 6, 0: 10, 9: 15}
+BASE_VALUES = {
+    **PEAK_BASE_VALUES,
+    **{f"utci_days_above_{t}_daily_max": count for t, count in ABOVE_BASE_COUNTS.items()},
+    **{f"utci_days_below_{t}_daily_min": count for t, count in BELOW_BASE_COUNTS.items()},
+}
+
 
 @pytest.fixture
 def yearly_statistics():
-    """Provide three years of synthetic UTCI statistics on a 4 x 4 grid.
+    """
+    Provide three years of synthetic UTCI statistics on a 4 x 4 grid.
 
     The fixture covers 2016–2018. Yearly maximum and minimum values are
     in degrees Celsius, and each threshold field contains increasing
     yearly day counts. The top-left pixel is missing (NaN) in every field
     and year, so tests can check missing-value handling.
     """
-
     from rasterio.transform import from_origin
+
     from utci_map.source.models import YearlyStats
 
-    shape = (3, 4, 4)
-    def values(sequence):
-        result = np.broadcast_to(np.array(sequence, dtype=float)[:, None, None], shape).copy()
-        result[:, 0, 0] = np.nan
-        return result
+    years = np.array([2016, 2017, 2018])
+    shape = (years.size, GRID_SIZE, GRID_SIZE)
 
-    cubes = {
-        "utci_yearly_max": values([30, 31, 32]),
-        "utci_yearly_min": values([-20, -21, -22]),
-    }
-
-    for threshold, count in [(26, 10), (32, 6), (38, 3), (46, 1)]:
-        cubes[f"utci_days_above_{threshold}_daily_max"] = values([count, count + 1, count + 2])
-
-    for threshold, count in [(-40, 1), (-27, 3), (-13, 6), (0, 10), (9, 15)]:
-        cubes[f"utci_days_below_{threshold}_daily_min"] = values([count, count + 1, count + 2])
+    cubes = {}
+    for name, base in BASE_VALUES.items():
+        # The yearly minimum falls each year, so the last year holds both UTCI records.
+        step = -1.0 if name == "utci_yearly_min" else 1.0
+        yearly = base + step * np.arange(years.size, dtype=float)
+        cubes[name] = np.broadcast_to(yearly[:, None, None], shape).copy()
+        cubes[name][:, 0, 0] = np.nan
 
     return YearlyStats(
-        years=np.array([2016, 2017, 2018]), cubes=cubes,
-        peak_units={"utci_yearly_max": "degC", "utci_yearly_min": "degC"},
-        shape=(4, 4), transform=from_origin(-24, 67, 0.25, 0.25),
+        years=years,
+        cubes=cubes,
+        peak_units={name: "degC" for name in PEAK_BASE_VALUES},
+        shape=(GRID_SIZE, GRID_SIZE),
+        transform=from_origin(WEST, NORTH, PIXEL_DEGREES, PIXEL_DEGREES),
     )
 
 
@@ -53,60 +67,91 @@ def netcdf_factory(tmp_path):
     Values increase with each time step, and the top-left pixel is marked
     as missing in every field and year.
 
-    Tests can customise the years, omitted fields, peak units, grid location,
-    peak scale/offset, and calendar to exercise valid and invalid inputs.
-    The factory returns the created file's path so tests can pass it directly
-    to the loader without mocking its functions.
+    Tests can customize the years, omitted fields, peak units, grid location,
+    peak scale/offset, and calendar through the keyword arguments of
+    _NetcdfOptions. The factory returns the created file's path so tests can
+    pass it directly to the loader without mocking its functions.
     """
-
     import rasterio
-    from scipy.io import netcdf_file
 
     with rasterio.Env() as env:
         if "netCDF" not in env.drivers():
             pytest.skip("Rasterio/GDAL requires the netCDF driver for these tests")
 
-    def create(name, years=(2016, 2017), missing=(), units="degC", west=-24.0,
-               peak_scale=1.0, peak_offset=0.0, calendar="standard"):
-
+    def create(name, **options):
         path = tmp_path / name
-        values = {"utci_yearly_max": 30, "utci_yearly_min": -20}
-        values.update({f"utci_days_above_{t}_daily_max": c for t, c in [(26, 10), (32, 6), (38, 3), (46, 1)]})
-        values.update({f"utci_days_below_{t}_daily_min": c for t, c in [(-40, 1), (-27, 3), (-13, 6), (0, 10), (9, 15)]})
+        _write_netcdf(path, _NetcdfOptions(**options))
 
-        # Write time and geographic coordinates, UTCI fields, and metadata
-        # to a real NetCDF file that the production loader can read.
-        with netcdf_file(path, "w") as nc:
-
-            nc.Conventions = "CF-1.8"
-            for dim, length in [("time", len(years)), ("lat", 4), ("lon", 4)]:
-                nc.createDimension(dim, length)
-            time = nc.createVariable("time", "f8", ("time",))
-            time.units = "days since 2010-01-01 00:00:00"
-            time.calendar = calendar
-            time.standard_name = "time"
-            time[:] = [(datetime(y, 1, 1) - datetime(2010, 1, 1)).days for y in years]
-            lat = nc.createVariable("lat", "f8", ("lat",))
-            lat.units = "degrees_north"
-            lat.standard_name = "latitude"
-            lat.axis = "Y"
-            lat[:] = 67 - 0.125 - np.arange(4) * 0.25
-            lon = nc.createVariable("lon", "f8", ("lon",))
-            lon.units = "degrees_east"
-            lon.standard_name = "longitude"
-            lon.axis = "X"
-            lon[:] = west + 0.125 + np.arange(4) * 0.25
-            for field, base in values.items():
-                if field in missing:
-                    continue
-                var = nc.createVariable(field, "i2", ("time", "lat", "lon"))
-                var._FillValue = np.int16(-9999)
-                var.units = units if field.startswith("utci_yearly_") else "days"
-                data = np.broadcast_to(np.arange(len(years))[:, None, None] + base, (len(years), 4, 4)).astype("i2").copy()
-                data[:, 0, 0] = -9999
-                if field.startswith("utci_yearly_"):
-                    var.scale_factor = np.float64(peak_scale)
-                    var.add_offset = np.float64(peak_offset)
-                var[:] = data
         return path
+
     return create
+
+
+@dataclass(frozen=True, kw_only=True)
+class _NetcdfOptions:
+    """Settings a test can change in a generated NetCDF file."""
+
+    years: tuple[int, ...] = (2016, 2017)
+    missing: tuple[str, ...] = ()
+    units: str = "degC"
+    west: float = WEST
+    peak_scale: float = 1.0
+    peak_offset: float = 0.0
+    calendar: str = "standard"
+
+
+def _write_netcdf(path, options):
+    """Write CF coordinates and every UTCI field not listed in options.missing."""
+    from scipy.io import netcdf_file
+
+    fields = {name: base for name, base in BASE_VALUES.items() if name not in options.missing}
+
+    with netcdf_file(path, "w") as nc:
+        nc.Conventions = "CF-1.8"
+        _write_coordinates(nc, options)
+
+        for field, base in fields.items():
+            _write_field(nc, field, base, options)
+
+
+def _write_coordinates(nc, options):
+    """Write the time axis (days since 2010) and the 0.25° lat/lon cell centers."""
+    for dim, length in [("time", len(options.years)), ("lat", GRID_SIZE), ("lon", GRID_SIZE)]:
+        nc.createDimension(dim, length)
+
+    time = nc.createVariable("time", "f8", ("time",))
+    time.units = "days since 2010-01-01 00:00:00"
+    time.calendar = options.calendar
+    time.standard_name = "time"
+    time[:] = [(datetime(year, 1, 1) - datetime(2010, 1, 1)).days for year in options.years]
+
+    centers = PIXEL_DEGREES / 2 + np.arange(GRID_SIZE) * PIXEL_DEGREES
+    _write_axis(nc, "lat", units="degrees_north", axis="Y", values=NORTH - centers)
+    _write_axis(nc, "lon", units="degrees_east", axis="X", values=options.west + centers)
+
+
+def _write_axis(nc, name, *, units, axis, values):
+    """Write one CF coordinate variable."""
+    variable = nc.createVariable(name, "f8", (name,))
+    variable.units = units
+    variable.standard_name = {"lat": "latitude", "lon": "longitude"}[name]
+    variable.axis = axis
+    variable[:] = values
+
+
+def _write_field(nc, field, base, options):
+    """Write one int16 field counting up from base per year, with the top-left pixel missing."""
+    is_peak = field in PEAK_BASE_VALUES
+    variable = nc.createVariable(field, "i2", ("time", "lat", "lon"))
+    variable._FillValue = np.int16(FILL_VALUE)
+    variable.units = options.units if is_peak else "days"
+
+    if is_peak:
+        variable.scale_factor = np.float64(options.peak_scale)
+        variable.add_offset = np.float64(options.peak_offset)
+
+    shape = (len(options.years), GRID_SIZE, GRID_SIZE)
+    data = np.broadcast_to((base + np.arange(len(options.years)))[:, None, None], shape)
+    data = data.astype("i2")
+    data[:, 0, 0] = FILL_VALUE
+    variable[:] = data

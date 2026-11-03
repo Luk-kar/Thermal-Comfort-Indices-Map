@@ -11,18 +11,15 @@ Band = tuple[str, np.ndarray, str]  # (name, values with shape (height, width), 
 @dataclass(frozen=True)
 class FileRecords:
     """
-    Hold yearly statistics read from a single input NetCDF file.
+    Hold the selected UTCI fields read from a single input NetCDF file.
 
-    Populated by the selected UTCI fields.
-    Years come from the NetCDF time coordinates;
-    arrays contain values with missing data masked as
-    NaN and scale/offset applied.
-    Peak units
-    and grid information come from the fields' metadata.
+    Years come from the NetCDF time coordinates. Arrays hold one (height, width)
+    array per year, with missing data masked as NaN and scale/offset applied.
+    Peak units and grid information come from the fields' metadata.
     """
 
     years: list[int]  # e.g. [2015, 2016]
-    # e.g. {"utci_yearly_max": [array_2015, array_2016]}; each array is 2-D
+    # e.g. {"utci_yearly_max": [array_2015, array_2016]}
     arrays: dict[str, list[np.ndarray]]
     peak_units: dict[str, str]  # e.g. {"utci_yearly_max": "K", "utci_yearly_min": "K"}
     shape: tuple[int, int]  # (height, width), e.g. (180, 360)
