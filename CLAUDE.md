@@ -12,7 +12,7 @@ Downloads yearly UTCI (Universal Thermal Climate Index) statistics for European 
 
 ## Commands
 
-Run everything from the project root, because paths in `utci_map/source/config.py` are relative to the working directory.
+Run everything from the project root, because paths in `utci_map/source/contracts/config.py` are relative to the working directory.
 
 ```sh
 uv sync                                        # install dependencies
@@ -42,7 +42,7 @@ Run Ruff and mypy after changing Python code. Their settings in `pyproject.toml`
 `utci_map/__main__.py` orchestrates the stages under `utci_map/source/`:
 
 1. **Extract:** unpack `downloads/utci_<region>_<start>_<end>.zip` into `downloads/<region>/`.
-2. **Load (`loading/`):** read the NetCDF fields listed in `schema.SELECTED_NETCDF_FIELDS`, then validate grid, units and year coverage across files. NetCDF files without the yearly peak fields are skipped.
+2. **Load (`loading/`):** read the NetCDF fields listed in `SELECTED_NETCDF_FIELDS` (`contracts/schema.py`), then validate grid, units and year coverage across files. NetCDF files without the yearly peak fields are skipped.
 3. **Compute (`computation/`):** build the summary bands.
 4. **GeoTIFF (`products/geotiff.py`):** write `utci_summary.tif` in EPSG:4326, with band names as descriptions.
 5. **Maps (`products/maps/`):** render indexed PNGs in EPSG:3857 plus JSON sidecars.
@@ -51,7 +51,7 @@ Regions are processed in two passes. All GeoTIFFs are written first, then `globa
 
 ### Data semantics
 
-- CDS day counts are cumulative (days above or below a threshold). `thermal_stress_summary.py` subtracts them into disjoint brackets and raises an error if a result is negative.
+- CDS day counts are cumulative (days above or below a threshold). `computation/thermal_stress_summary.py` subtracts them into disjoint brackets and raises an error if a result is negative.
 - Day-count bands are medians across years. Total bands sum categories within each year before taking the median, so a total does not generally equal the sum of the category medians.
 - Heat days use the daily maximum (above 26 °C) and cold days use the daily minimum (below 9 °C). The same day can count as both.
 - A pixel missing in any year stays missing in the day-count bands.
@@ -73,15 +73,15 @@ Regions are processed in two passes. All GeoTIFFs are written first, then `globa
 Several values are duplicated with nothing enforcing that they match:
 
 - **Regions:** defined by `EuropeBounds` in `thermal_dataset_download.py` and must also be added to `REGIONS` in `frontend/config.js`, using the lowercased attribute name. `get_download_regions` only picks up attributes whose bounds are also in `EuropeBounds.REGIONS`.
-- **Years:** set in both `thermal_dataset_download.py` and `utci_map/source/config.py`. The years in `config.py` determine which archive filename `utci_map` looks for.
-- **Stress brackets:** `schema.py` derives field and band names from the brackets, but `popup/content.js` hard-codes labels for each band name.
+- **Years:** set in both `thermal_dataset_download.py` and `utci_map/source/contracts/config.py`. The years in `config.py` determine which archive filename `utci_map` looks for.
+- **Stress brackets:** `contracts/schema.py` derives field and band names from the brackets, but `popup/content.js` hard-codes labels for each band name.
 - **Preview script:** `thermal_dataset_preview.py` is a self-contained copy of the schema, palettes and processing logic, and shares only download helpers with `utci_map`. Changes to `utci_map` do not reach it.
 
 ## Repository notes
 
-- `python -m utci_map` logs to the terminal and to a new file per run, `logs/utci_map/<date>_<time>.log` (ignored by git). It records every file read or written with its size, and warns when a file, an extraction or a step exceeds the limits in `utci_map/source/config.py`. Modules log through `logging.getLogger(__name__)`; only `__main__.py` configures handlers.
+- `python -m utci_map` logs to the terminal and to a new file per run, `logs/utci_map/<date>_<time>.log` (ignored by git). It records every file read or written with its size, and warns when a file, an extraction or a step exceeds the limits in `utci_map/source/contracts/config.py`. Modules log through `logging.getLogger(__name__)`; only `__main__.py` configures handlers.
 - Only the `.name` of the output paths in `config.py` is used; the real files live in `output/map/<region>/`. The five files directly in `output/` are not used by the pipeline or the frontend, and appear to predate the regional layout.
 - `output/map/<region>/` is committed because the frontend reads it directly. Regenerate and commit it when pipeline changes affect the outputs. `downloads/` and `*.zip` are ignored, so a regeneration depends on local archives.
-- Every package folder in `utci_map` has an empty `__init__.py`, except the `tests/` folders. With Ruff's `namespace-packages` and `A005`, this makes Ruff reject a module or package folder named after a standard-library module (a folder only when it has `__init__.py`) and `N999` reject badly named modules. Give new package folders an `__init__.py` too.
+- Every package folder in `utci_map` has an `__init__.py`, except the `tests/` folders. It is the package's public interface: it only re-exports names with the `from x import name as name` form, without `__all__`, and every other module is private to its package. Other packages import only from `__init__.py`. Shared settings, schema and data types live in `utci_map/source/contracts/`. With Ruff's `namespace-packages` and `A005`, this makes Ruff reject a module or package folder named after a standard-library module (a folder only when it has `__init__.py`) and `N999` reject badly named modules. Give new package folders an `__init__.py` too.
 - Python tests sit next to the code in `tests/` directories, and downloader tests are in the root `tests/`. Fixtures in `utci_map/source/conftest.py` build synthetic data and real temporary NetCDF files, and NetCDF tests skip if GDAL lacks the netCDF driver.
 - A `<module>.unit.test.py` file beside a `test_<module>.py` is a second, narrower tier: it pins the module's current internal behavior as a guard against unintended side effects from refactors, not a statement of required behavior. Its module docstring says this explicitly. Don't read it as a spec, and don't infer the module's public contract from what it happens to assert — that contract lives only in `test_<module>.py`.

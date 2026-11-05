@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("rasterio")
 
-from utci_map.source.config import COASTLINE_PATH
+from utci_map.source.contracts import COASTLINE_PATH
 from utci_map.source.products.maps.models import MapLayer, MapOutput, RenderOptions
 
 

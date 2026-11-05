@@ -7,9 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from utci_map.source.config import COLOR_MAP_STEP, MAX_INDEX, NODATA_INDEX
+from utci_map.source.contracts import COLOR_MAP_STEP, MAX_INDEX, NODATA_INDEX
 from utci_map.source.products.maps.models import Bounds, ImagePlacement, MetricScale
-from utci_map.source.runlog.file_io import logged_file_io
+from utci_map.source.runlog import logged_file_io
 
 _LOGGER = logging.getLogger(__name__)
 

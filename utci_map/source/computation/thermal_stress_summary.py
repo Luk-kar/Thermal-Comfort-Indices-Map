@@ -12,8 +12,7 @@ from typing import Literal
 
 import numpy as np
 
-from utci_map.source.models import Band, YearlyStats
-from utci_map.source.schema import (
+from utci_map.source.contracts import (
     ABOVE_THRESHOLDS,
     BELOW_THRESHOLDS,
     COLD_TOTAL_BAND,
@@ -24,6 +23,8 @@ from utci_map.source.schema import (
     MIN_BRACKETS,
     PEAK_MAX,
     PEAK_MIN,
+    Band,
+    YearlyStats,
 )
 
 _LOGGER = logging.getLogger(__name__)

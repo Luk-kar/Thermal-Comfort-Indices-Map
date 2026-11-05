@@ -11,9 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
+from utci_map.source.contracts import SELECTED_NETCDF_FIELDS, FileRecords, YearlyStats
 from utci_map.source.loading.netcdf_reader import read_yearly_file, transforms_match
-from utci_map.source.models import FileRecords, YearlyStats
-from utci_map.source.schema import SELECTED_NETCDF_FIELDS
 
 _LOGGER = logging.getLogger(__name__)
 

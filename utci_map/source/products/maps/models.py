@@ -8,7 +8,7 @@ import numpy as np
 from rasterio.crs import CRS
 from rasterio.transform import Affine
 
-from utci_map.source.config import COASTLINE_PATH
+from utci_map.source.contracts import COASTLINE_PATH
 
 WEBMERCATOR_CRS: CRS = CRS.from_epsg(3857)
 WGS84_CRS: CRS = CRS.from_epsg(4326)

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from utci_map.source.config import MAX_INDEX, NODATA_INDEX
+from utci_map.source.contracts import MAX_INDEX, NODATA_INDEX
 
 HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{6}")
 

@@ -8,8 +8,16 @@ import numpy as np
 import rasterio
 from PIL import Image
 
-from utci_map.source.config import MAX_INDEX, NODATA_INDEX
+from utci_map.source.contracts import (
+    COLD_TOTAL_BAND,
+    HEAT_TOTAL_BAND,
+    MAX_BAND_NAMES,
+    MAX_INDEX,
+    MIN_BAND_NAMES,
+    NODATA_INDEX,
+)
 from utci_map.source.products.geotiff import band_indices
+from utci_map.source.products.maps.encoding import palette_rgb, to_indices, write_sidecar
 from utci_map.source.products.maps.land_mask import land_mask, load_land_geometries
 from utci_map.source.products.maps.models import (
     WEBMERCATOR_CRS,
@@ -22,11 +30,8 @@ from utci_map.source.products.maps.models import (
     RenderOptions,
     ValueRange,
 )
-from utci_map.source.products.maps.palette import palette_rgb, to_indices
 from utci_map.source.products.maps.reprojection import reproject_to_webmercator
-from utci_map.source.products.maps.sidecar import write_sidecar
-from utci_map.source.runlog.file_io import logged_file_io
-from utci_map.source.schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND, MAX_BAND_NAMES, MIN_BAND_NAMES
+from utci_map.source.runlog import logged_file_io
 
 _LOGGER = logging.getLogger(__name__)
 

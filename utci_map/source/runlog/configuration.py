@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from utci_map.source.config import LOGGER_NAME
+from utci_map.source.contracts import LOGGER_NAME
 
 FILE_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 CONSOLE_FORMAT = "%(levelname)s: %(message)s"

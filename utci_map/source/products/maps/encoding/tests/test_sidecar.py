@@ -6,8 +6,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from utci_map.source.products.maps.encoding.sidecar import write_sidecar
 from utci_map.source.products.maps.models import ImagePlacement, MetricScale
-from utci_map.source.products.maps.sidecar import write_sidecar
 
 
 @pytest.fixture

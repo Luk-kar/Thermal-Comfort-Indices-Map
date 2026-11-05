@@ -9,8 +9,8 @@ import rasterio
 from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
-from utci_map.source.models import Band
-from utci_map.source.runlog.file_io import logged_file_io
+from utci_map.source.contracts import Band
+from utci_map.source.runlog import logged_file_io
 
 _LOGGER = logging.getLogger(__name__)
 

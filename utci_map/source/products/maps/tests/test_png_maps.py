@@ -13,7 +13,7 @@ from PIL import Image
 
 pytest.importorskip("rasterio")
 
-from utci_map.source.config import COASTLINE_PATH, MAX_INDEX, NODATA_INDEX
+from utci_map.source.contracts import COASTLINE_PATH, MAX_INDEX, NODATA_INDEX
 from utci_map.source.products.maps.models import MapOutput, RenderOptions, ValueRange
 from utci_map.source.products.maps.png_maps import global_value_ranges, render_pngs
 

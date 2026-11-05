@@ -12,7 +12,7 @@ from rasterio.features import geometry_mask
 from rasterio.warp import transform_geom
 
 from utci_map.source.products.maps.models import WGS84_CRS, Geometry, RasterGrid
-from utci_map.source.runlog.file_io import logged_file_io
+from utci_map.source.runlog import logged_file_io
 
 _LOGGER = logging.getLogger(__name__)
 

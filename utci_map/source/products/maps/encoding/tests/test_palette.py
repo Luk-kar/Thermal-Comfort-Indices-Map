@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from utci_map.source.products.maps.palette import palette_rgb
+from utci_map.source.products.maps.encoding.palette import palette_rgb
 
 
 @pytest.mark.parametrize(

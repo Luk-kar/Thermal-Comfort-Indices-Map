@@ -12,6 +12,12 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 - Separate reading and validating data, computing results, and writing outputs into distinct modules. Keep orchestration in the entry point.
 - Keep shared data contracts, domain constants and run settings in their own modules, separate from the logic that uses them.
 - Use absolute imports from the project root.
+- Organize code as a shallow tree of packages, so the structure alone shows what is public and what is private. Keep at most 7 entries (files and subdirectories) per directory, and nest deeper instead of adding more.
+- Give each package an `__init__.py` as its only public interface. It contains no logic, only re-exports of the fewest names other packages need. Don't define `__all__`.
+- Treat every module in a package other than `__init__.py` as private: code outside the package must not import it.
+- Import from another package only through its `__init__.py`. Let each package depend on at most a few sibling packages.
+- Treat a package's own `tests/` folder as part of the package: its tests may import the package's private modules.
+- Don't name modules or packages after Python keywords or standard-library modules, such as `types`, `logging` or `io`.
 - Order a module with its public functions first and `_private` helpers below. Keep the public surface small.
 - Keep functions to at most 30 lines of code, not counting the docstring, comments and blank lines. Break longer functions into smaller helpers with one clear purpose each.
 - Keep files to at most 200 lines of code, or 300 for test files, not counting docstrings, comments and blank lines. Split larger files by responsibility.

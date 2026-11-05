@@ -35,7 +35,7 @@ def yearly_statistics():
     """
     from rasterio.transform import from_origin
 
-    from utci_map.source.models import YearlyStats
+    from utci_map.source.contracts import YearlyStats
 
     years = np.array([2016, 2017, 2018])
     shape = (years.size, GRID_SIZE, GRID_SIZE)

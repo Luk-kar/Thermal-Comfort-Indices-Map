@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from utci_map.source.config import LARGE_IO_WARNING_BYTES, SLOW_IO_WARNING_SECONDS
+from utci_map.source.contracts import LARGE_IO_WARNING_BYTES, SLOW_IO_WARNING_SECONDS
 
 BYTES_PER_KB = 1024
 

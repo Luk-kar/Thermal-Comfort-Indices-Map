@@ -11,9 +11,14 @@ import rasterio
 from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
-from utci_map.source.models import FieldRecords, FileRecords
-from utci_map.source.runlog.file_io import logged_file_io
-from utci_map.source.schema import PEAK_MAX, PEAK_MIN, SELECTED_NETCDF_FIELDS
+from utci_map.source.contracts import (
+    PEAK_MAX,
+    PEAK_MIN,
+    SELECTED_NETCDF_FIELDS,
+    FieldRecords,
+    FileRecords,
+)
+from utci_map.source.runlog import logged_file_io
 
 _LOGGER = logging.getLogger(__name__)
 
