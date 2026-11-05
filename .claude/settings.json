@@ -11,6 +11,10 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/radon_check.sh" }]
       }
     ]
   },

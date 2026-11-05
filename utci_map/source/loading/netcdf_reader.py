@@ -91,14 +91,18 @@ def _field_uris(nc_file: Path) -> dict[str, str]:
 
 def _read_selected_fields(uris: dict[str, str], nc_file: Path) -> FileRecords:
     """Read selected fields and ensure they share the years and grid of the first one."""
+
     reference_name, *other_names = SELECTED_NETCDF_FIELDS
     reference = _read_field(uris[reference_name], nc_file, reference_name)
     fields = {reference_name: reference}
 
     for name in other_names:
+
         field = _read_field(uris[name], nc_file, name)
+
         if field.years != reference.years:
             raise ValueError(f"{nc_file.name}:{name}: time axis differs from {reference_name}")
+        
         if field.shape != reference.shape or not transforms_match(
             field.transform, reference.transform
         ):

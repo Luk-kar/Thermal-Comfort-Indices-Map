@@ -53,6 +53,41 @@ def _copy_tif(path, tmp_path, name):
     return target
 
 
+def _assert_placement(metadata):
+    """Check that the sidecar places the image at the raster's northwest corner."""
+    west, north = metadata["coordinates"][0]
+    east, south = metadata["coordinates"][2]
+
+    assert west < east
+    assert south < north
+    assert west == pytest.approx(-24, abs=0.3)
+    assert north == pytest.approx(67, abs=0.3)
+
+
+def _assert_palette_matches_color_map(png_path, metadata):
+    with Image.open(png_path) as image:
+        assert image.mode == "P"
+        palette = image.getpalette()
+
+    for entry in metadata["color_map"]:
+        assert palette[3 * entry["index"] : 3 * entry["index"] + 3] == entry["rgb"]
+
+
+def _assert_regions_share_cold_scale(cold):
+    """Every region reports the same shared range and the same color map."""
+    for metadata in cold.values():
+        metric = metadata["metric"]
+        assert (metric["min"], metric["max"]) == (0.0, 100.0)
+        assert (metric["raw_min"], metric["raw_max"]) == (0.0, 100.0)
+
+    assert cold["low"]["color_map"] == cold["high"]["color_map"]
+
+
+def _local_range(metadata):
+    metric = metadata["metric"]
+    return metric["local_min"], metric["local_max"]
+
+
 class TestRenderPngs:
     @pytest.mark.parametrize(
         "kind, expected",
@@ -75,17 +110,8 @@ class TestRenderPngs:
         assert metadata["metric"]["units"] == "days"
         assert (metadata["metric"]["raw_min"], metadata["metric"]["raw_max"]) == (low, high)
 
-        west, north = metadata["coordinates"][0]
-        east, south = metadata["coordinates"][2]
-        assert west < east and south < north
-        assert west == pytest.approx(-24, abs=0.3)
-        assert north == pytest.approx(67, abs=0.3)
-
-        with Image.open(outputs[kind].png_path) as image:
-            assert image.mode == "P"
-            palette = image.getpalette()
-        for entry in metadata["color_map"]:
-            assert palette[3 * entry["index"] : 3 * entry["index"] + 3] == entry["rgb"]
+        _assert_placement(metadata)
+        _assert_palette_matches_color_map(outputs[kind].png_path, metadata)
 
     def test_constant_map_uses_the_lightest_color(self, map_input, tmp_path):
         outputs = _outputs(tmp_path)
@@ -213,16 +239,9 @@ class TestRenderPngs:
             )
 
         cold = {name: _metadata(outputs[name]["cold"]) for name in outputs}
-        for name in outputs:
-            metric = cold[name]["metric"]
-            assert (metric["min"], metric["max"]) == (0.0, 100.0)
-            assert (metric["raw_min"], metric["raw_max"]) == (0.0, 100.0)
-        assert cold["low"]["color_map"] == cold["high"]["color_map"]
-        assert (cold["low"]["metric"]["local_min"], cold["low"]["metric"]["local_max"]) == (25, 50)
-        assert (cold["high"]["metric"]["local_min"], cold["high"]["metric"]["local_max"]) == (
-            50,
-            100,
-        )
+        _assert_regions_share_cold_scale(cold)
+        assert _local_range(cold["low"]) == (25, 50)
+        assert _local_range(cold["high"]) == (50, 100)
         assert _metadata(outputs["low"]["heat"])["metric"]["max"] == 200.0
 
         fifty_days = round(0.5 * MAX_INDEX)
