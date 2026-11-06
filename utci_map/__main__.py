@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from zipfile import ZipFile
@@ -10,19 +11,14 @@ from thermal_dataset_download import OUTPUT_DIR as DOWNLOAD_DIR
 from thermal_dataset_download import EuropeBounds, build_target, get_download_regions
 from utci_map.source.computation import build_bands
 from utci_map.source.contracts import (
-    COLD_COLORS,
-    COLD_JSON_PATH,
-    COLD_PNG_PATH,
     DATA_DIR,
     DISCRETE_COLORS,
     END_YEAR,
     EXTRACTED_FILES_WARNING_COUNT,
-    HEAT_COLORS,
-    HEAT_JSON_PATH,
-    HEAT_PNG_PATH,
     LOG_DIR,
     LOG_FILE_TIME_FORMAT,
     LOGGER_NAME,
+    MAP_KINDS,
     OUTPUT_DIR,
     PNG_SCALE,
     REQUIRE_COMPLETE_PERIOD,
@@ -39,7 +35,7 @@ from utci_map.source.products import (
     render_pngs,
     write_geotiff,
 )
-from utci_map.source.runlog import configure_logging, format_size, logged_file_io, warn_if_large
+from utci_map.source.runlog import configure_logging, format_size, logged_read, warn_if_large
 
 _LOGGER = logging.getLogger(LOGGER_NAME)
 
@@ -81,13 +77,13 @@ def _build_all_regions() -> None:
         tif_paths.append(tif_path)
 
     options = RenderOptions(png_scale=PNG_SCALE, discrete_colors=DISCRETE_COLORS)
-    cold_range, heat_range = global_value_ranges(tif_paths, options)
+    value_ranges = global_value_ranges(tif_paths, options)
 
-    _LOGGER.info("Global cold scale: %.1f to %.1f days", cold_range.vmin, cold_range.vmax)
-    _LOGGER.info("Global heat scale: %.1f to %.1f days", heat_range.vmin, heat_range.vmax)
+    for name, value_range in value_ranges.items():
+        _LOGGER.info("Global %s scale: %.1f to %.1f days", name, value_range.vmin, value_range.vmax)
 
     for tif_path in tif_paths:
-        create_pngs_with_sidecars(tif_path, tif_path.parent, (cold_range, heat_range), options)
+        create_pngs_with_sidecars(tif_path, tif_path.parent, value_ranges, options)
 
 
 def extract_region(archive_path: Path, data_dir: Path) -> None:
@@ -97,7 +93,7 @@ def extract_region(archive_path: Path, data_dir: Path) -> None:
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    with logged_file_io(_LOGGER, "Read", archive_path), ZipFile(archive_path) as archive:
+    with logged_read(_LOGGER, archive_path), ZipFile(archive_path) as archive:
         members = archive.infolist()
         archive.extractall(data_dir)
 
@@ -149,25 +145,20 @@ def create_tif(annual: YearlyStats, tif_path: Path) -> None:
 def create_pngs_with_sidecars(
     tif_path: Path,
     output_dir: Path,
-    value_ranges: tuple[ValueRange, ValueRange],
+    value_ranges: Mapping[str, ValueRange],
     options: RenderOptions,
 ) -> None:
-    """Render the cold and heat PNGs and sidecars for one region on the shared scales."""
-    render_pngs(
-        tif_path,
-        cold=MapOutput(
-            png_path=output_dir / COLD_PNG_PATH.name,
-            json_path=output_dir / COLD_JSON_PATH.name,
-            colors=COLD_COLORS,
-        ),
-        heat=MapOutput(
-            png_path=output_dir / HEAT_PNG_PATH.name,
-            json_path=output_dir / HEAT_JSON_PATH.name,
-            colors=HEAT_COLORS,
-        ),
-        options=options,
-        value_ranges=value_ranges,
-    )
+    """Render every map kind's PNG and sidecar for one region on the shared scales."""
+    outputs = {
+        kind.name: MapOutput(
+            png_path=output_dir / f"{kind.file_stem}.png",
+            json_path=output_dir / f"{kind.file_stem}.json",
+            colors=kind.colors,
+        )
+        for kind in MAP_KINDS
+    }
+
+    render_pngs(tif_path, outputs, options=options, value_ranges=value_ranges)
 
 
 if __name__ == "__main__":

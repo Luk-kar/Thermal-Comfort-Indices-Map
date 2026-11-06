@@ -14,5 +14,6 @@ downloads/*
 !.claude/settings.json
 !.claude/rules/python/*
 !.claude/CLAUDE.md
+!.claude/skills/*
 .vscode
 logs/

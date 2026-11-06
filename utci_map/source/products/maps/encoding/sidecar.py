@@ -9,7 +9,7 @@ import numpy as np
 
 from utci_map.source.contracts import COLOR_MAP_STEP, MAX_INDEX, NODATA_INDEX
 from utci_map.source.products.maps.models import Bounds, ImagePlacement, MetricScale
-from utci_map.source.runlog import logged_file_io
+from utci_map.source.runlog import logged_write
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,9 +42,8 @@ def write_sidecar(
         "color_map": _color_map(rgb, metric.vmin, metric.vmax),
     }
     text = json.dumps(sidecar, indent=2, allow_nan=False) + "\n"
-    json_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with logged_file_io(_LOGGER, "Wrote", json_path):
+    with logged_write(_LOGGER, json_path):
         json_path.write_text(text, encoding="utf-8")
 
 

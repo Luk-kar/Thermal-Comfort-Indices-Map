@@ -101,7 +101,7 @@ class TestRenderPngs:
         metric, low, high = expected
         outputs = _outputs(tmp_path)
 
-        assert render_pngs(map_input(), **outputs, options=NO_COASTLINE) is None
+        assert render_pngs(map_input(), outputs, options=NO_COASTLINE) is None
 
         metadata = _metadata(outputs[kind])
         assert metadata["image"] == outputs[kind].png_path.name
@@ -115,7 +115,7 @@ class TestRenderPngs:
 
     def test_constant_map_uses_the_lightest_color(self, map_input, tmp_path):
         outputs = _outputs(tmp_path)
-        render_pngs(map_input(), **outputs, options=NO_COASTLINE)
+        render_pngs(map_input(), outputs, options=NO_COASTLINE)
 
         pixels = _pixels(outputs["heat"].png_path)
         np.testing.assert_array_equal(pixels[pixels != NODATA_INDEX], 0)
@@ -132,7 +132,7 @@ class TestRenderPngs:
         COASTLINE_PATH.write_text(west_half_coastline.read_text(), encoding="utf-8")
         outputs = _outputs(tmp_path)
 
-        render_pngs(map_input(), **outputs, **({"options": None} if explicit_none else {}))
+        render_pngs(map_input(), outputs, **({"options": None} if explicit_none else {}))
 
         for output in outputs.values():
             alpha = _alpha(output.png_path)
@@ -150,7 +150,7 @@ class TestRenderPngs:
 
         render_pngs(
             map_input(cold=values, heat=values),
-            **outputs,
+            outputs,
             options=RenderOptions(coastline_path=west_half_coastline),
         )
 
@@ -167,17 +167,17 @@ class TestRenderPngs:
         options = RenderOptions(coastline_path=tmp_path / "missing.geojson")
 
         with pytest.raises(FileNotFoundError):
-            render_pngs(map_input(), **_outputs(tmp_path), options=options)
+            render_pngs(map_input(), _outputs(tmp_path), options=options)
 
     def test_scale_changes_image_size_not_geographic_placement(self, map_input, tmp_path):
         """Render at scale 1 and 2; the image doubles while the sidecar stays identical."""
         path, cold = map_input(), _outputs(tmp_path)["cold"]
-        render_pngs(path, **_outputs(tmp_path), options=NO_COASTLINE)
+        render_pngs(path, _outputs(tmp_path), options=NO_COASTLINE)
         with Image.open(cold.png_path) as image:
             original_size = image.size
         original_metadata = _metadata(cold)
 
-        render_pngs(path, **_outputs(tmp_path), options=replace(NO_COASTLINE, png_scale=2))
+        render_pngs(path, _outputs(tmp_path), options=replace(NO_COASTLINE, png_scale=2))
 
         with Image.open(cold.png_path) as image:
             assert image.size == tuple(2 * value for value in original_size)
@@ -188,7 +188,7 @@ class TestRenderPngs:
         values[2:6, 2:6] = 10
         outputs = _outputs(tmp_path)
 
-        render_pngs(map_input(cold=values, heat=values), **outputs, options=NO_COASTLINE)
+        render_pngs(map_input(cold=values, heat=values), outputs, options=NO_COASTLINE)
 
         alpha = _alpha(outputs["cold"].png_path)
         assert (alpha == 0).any()
@@ -213,7 +213,17 @@ class TestRenderPngs:
         options = replace(NO_COASTLINE, png_scale=0) if case == "invalid_scale" else NO_COASTLINE
 
         with pytest.raises(error):
-            render_pngs(map_input(**inputs[case]), **_outputs(tmp_path), options=options)
+            render_pngs(map_input(**inputs[case]), _outputs(tmp_path), options=options)
+
+    @pytest.mark.parametrize("argument", ["outputs", "value_ranges"])
+    def test_mapping_without_every_map_kind_is_rejected(self, map_input, tmp_path, argument):
+        outputs = _outputs(tmp_path)
+        value_ranges = {"cold": ValueRange(0.0, 1.0), "heat": ValueRange(0.0, 1.0)}
+        arguments = {"outputs": outputs, "value_ranges": value_ranges}
+        del arguments[argument]["heat"]
+
+        with pytest.raises(ValueError, match=f"{argument} must have keys"):
+            render_pngs(map_input(), options=NO_COASTLINE, **arguments)
 
     def test_shared_ranges_give_regions_the_same_scale(self, map_input, tmp_path):
         """
@@ -233,9 +243,9 @@ class TestRenderPngs:
         for name, values in (("low", low), ("high", high)):
             render_pngs(
                 map_input(cold=values, heat=values),
-                **outputs[name],
+                outputs[name],
                 options=NO_COASTLINE,
-                value_ranges=(ValueRange(0.0, 100.0), ValueRange(0.0, 200.0)),
+                value_ranges={"cold": ValueRange(0.0, 100.0), "heat": ValueRange(0.0, 200.0)},
             )
 
         cold = {name: _metadata(outputs[name]["cold"]) for name in outputs}
@@ -256,9 +266,9 @@ class TestRenderPngs:
 
         render_pngs(
             map_input(cold=np.full((8, 8), 75.0)),
-            **outputs,
+            outputs,
             options=NO_COASTLINE,
-            value_ranges=(ValueRange(0.0, 100.0), ValueRange(0.0, 100.0)),
+            value_ranges={"cold": ValueRange(0.0, 100.0), "heat": ValueRange(0.0, 100.0)},
         )
 
         pixels = _pixels(outputs["cold"].png_path)
@@ -270,9 +280,9 @@ class TestRenderPngs:
 
         render_pngs(
             map_input(cold=np.full((8, 8), 5.0)),
-            **outputs,
+            outputs,
             options=NO_COASTLINE,
-            value_ranges=(ValueRange(5.0, 5.0), ValueRange(5.0, 5.0)),
+            value_ranges={"cold": ValueRange(5.0, 5.0), "heat": ValueRange(5.0, 5.0)},
         )
 
         metric = _metadata(outputs["cold"])["metric"]
@@ -291,21 +301,19 @@ class TestGlobalValueRanges:
             _copy_tif(map_input(cold=second, heat=np.full((8, 8), 90.0)), tmp_path, "second.tif"),
         ]
 
-        cold, heat = global_value_ranges(paths, NO_COASTLINE)
+        ranges = global_value_ranges(paths, NO_COASTLINE)
 
-        assert cold == ValueRange(20.0, 300.0)
-        assert heat == ValueRange(4.0, 90.0)
+        assert ranges == {"cold": ValueRange(20.0, 300.0), "heat": ValueRange(4.0, 90.0)}
 
     def test_ranges_exclude_sea_pixels(self, map_input, west_half_coastline):
         values = np.full((8, 8), 999.0)
         values[:, :4] = 10.0
 
-        cold, heat = global_value_ranges(
+        ranges = global_value_ranges(
             [map_input(cold=values, heat=values)], RenderOptions(coastline_path=west_half_coastline)
         )
 
-        assert cold == ValueRange(10.0, 10.0)
-        assert heat == ValueRange(10.0, 10.0)
+        assert ranges == {"cold": ValueRange(10.0, 10.0), "heat": ValueRange(10.0, 10.0)}
 
     def test_ranges_skip_a_region_without_valid_pixels(self, map_input, tmp_path):
         paths = [
@@ -313,9 +321,9 @@ class TestGlobalValueRanges:
             _copy_tif(map_input(cold=np.full((8, 8), 7.0)), tmp_path, "valid.tif"),
         ]
 
-        cold, _ = global_value_ranges(paths, NO_COASTLINE)
+        ranges = global_value_ranges(paths, NO_COASTLINE)
 
-        assert cold == ValueRange(7.0, 7.0)
+        assert ranges["cold"] == ValueRange(7.0, 7.0)
 
     @pytest.mark.parametrize("case", ["no_paths", "all_missing"])
     def test_input_without_valid_pixels_is_rejected(self, map_input, case):

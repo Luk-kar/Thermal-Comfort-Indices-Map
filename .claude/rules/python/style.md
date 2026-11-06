@@ -34,6 +34,7 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 ## Naming and data
 
 - Use American English everywhere, including identifiers, docstrings, comments and messages: `color`, `normalize`, `behavior`.
+- Give variables, parameters, functions and attributes descriptive names that say what they hold or do. Don't use single letters or abbreviations: write `index`, `left`, `right`, `date_format`, `file_descriptor`, `count` instead of `i`, `a`, `b`, `fmt`, `fd`, `n`. Keep an abbreviation only when it is the standard name in the domain (`utci`, `crs`, `png`), a conventional library alias (`np`, `xr`), or `_` for a value that is deliberately unused.
 - Define domain names and thresholds once as constants instead of repeating literals.
 - Use frozen dataclasses for structured data, and add `kw_only=True` for options objects.
 - Use Pydantic models only where mypy can't help: structured data entering the program from outside at runtime, such as JSON or GeoJSON files, API responses and config files. Turn on strict mode so values are rejected instead of silently converted. Don't use Pydantic for data built by our own code, where mypy already checks the types, or for numpy arrays, whose shape and dtype it can't check.

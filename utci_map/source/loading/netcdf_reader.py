@@ -18,7 +18,7 @@ from utci_map.source.contracts import (
     FieldRecords,
     FileRecords,
 )
-from utci_map.source.runlog import logged_file_io
+from utci_map.source.runlog import logged_read
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     Raise KeyError if it has the peak fields but lacks another selected field,
     and ValueError if a field has an unsupported grid, time axis or scaling.
     """
-    with logged_file_io(_LOGGER, "Read", nc_file):
+    with logged_read(_LOGGER, nc_file):
         records = _read_yearly_file(nc_file)
 
     if records is None:
@@ -56,9 +56,16 @@ def read_yearly_file(nc_file: Path) -> FileRecords | None:
     return records
 
 
-def transforms_match(a: Affine, b: Affine) -> bool:
-    """Check that two rasters share a grid, tolerating tiny floating-point differences."""
-    return bool(np.allclose(tuple(a)[:6], tuple(b)[:6], rtol=0.0, atol=TRANSFORM_TOLERANCE))
+def same_grid(a: FieldRecords | FileRecords, b: FieldRecords | FileRecords) -> bool:
+    """Check that two records share shape and transform, tolerating floating-point noise."""
+    if a.shape != b.shape:
+        return False
+
+    return bool(
+        np.allclose(
+            tuple(a.transform)[:6], tuple(b.transform)[:6], atol=TRANSFORM_TOLERANCE, rtol=0.0
+        )
+    )
 
 
 def _read_yearly_file(nc_file: Path) -> FileRecords | None:
@@ -97,16 +104,14 @@ def _read_selected_fields(uris: dict[str, str], nc_file: Path) -> FileRecords:
     fields = {reference_name: reference}
 
     for name in other_names:
-
         field = _read_field(uris[name], nc_file, name)
 
         if field.years != reference.years:
             raise ValueError(f"{nc_file.name}:{name}: time axis differs from {reference_name}")
-        
-        if field.shape != reference.shape or not transforms_match(
-            field.transform, reference.transform
-        ):
+
+        if not same_grid(field, reference):
             raise ValueError(f"{nc_file.name}:{name}: grid differs from {reference_name}")
+
         fields[name] = field
 
     return FileRecords(

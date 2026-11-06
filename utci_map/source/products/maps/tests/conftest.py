@@ -27,7 +27,7 @@ SUMMARY_BAND_NAMES = [
 
 
 @pytest.fixture
-def map_input(tmp_path):
+def map_input(tmp_path, grid_transform):
     """
     Provide a factory writing an 8 x 8 summary GeoTIFF independently of the production writer.
 
@@ -53,7 +53,7 @@ def map_input(tmp_path):
             count=len(selected),
             dtype="float32",
             crs=crs,
-            transform=from_origin(-24, 67, 0.25, 0.25),
+            transform=grid_transform,
             nodata=np.nan,
         ) as dst:
             for index, name in enumerate(selected, 1):

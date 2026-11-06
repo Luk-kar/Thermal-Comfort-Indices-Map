@@ -12,6 +12,27 @@ BYTES_PER_KB = 1024
 
 
 @contextmanager
+def logged_read(logger: logging.Logger, path: Path) -> Iterator[None]:
+    """Log the read inside the block, e.g. "Read downloads/iceland.zip (2.0 MB in 0.1 s)"."""
+    with logged_file_io(logger, "Read", path):
+        yield
+
+
+@contextmanager
+def logged_write(logger: logging.Logger, path: Path) -> Iterator[None]:
+    """
+    Create the parent folder of path, then log the write inside the block.
+
+    E.g. `with logged_write(logger, path): write(path)` logs
+    "Wrote output/map/iceland/utci_summary.tif (1.2 MB in 0.3 s)".
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with logged_file_io(logger, "Wrote", path):
+        yield
+
+
+@contextmanager
 def logged_file_io(logger: logging.Logger, action: str, path: Path) -> Iterator[None]:
     """
     Time the I/O inside the block, then log it with the file's size.

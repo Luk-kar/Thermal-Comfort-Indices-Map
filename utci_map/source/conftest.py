@@ -24,7 +24,15 @@ BASE_VALUES = {
 
 
 @pytest.fixture
-def yearly_statistics():
+def grid_transform():
+    """Provide the synthetic grid's transform: 0.25° pixels from 24° W, 67° N."""
+    from rasterio.transform import from_origin
+
+    return from_origin(WEST, NORTH, PIXEL_DEGREES, PIXEL_DEGREES)
+
+
+@pytest.fixture
+def yearly_statistics(grid_transform):
     """
     Provide three years of synthetic UTCI statistics on a 4 x 4 grid.
 
@@ -33,8 +41,6 @@ def yearly_statistics():
     yearly day counts. The top-left pixel is missing (NaN) in every field
     and year, so tests can check missing-value handling.
     """
-    from rasterio.transform import from_origin
-
     from utci_map.source.contracts import YearlyStats
 
     years = np.array([2016, 2017, 2018])
@@ -53,7 +59,7 @@ def yearly_statistics():
         cubes=cubes,
         peak_units={name: "degC" for name in PEAK_BASE_VALUES},
         shape=(GRID_SIZE, GRID_SIZE),
-        transform=from_origin(WEST, NORTH, PIXEL_DEGREES, PIXEL_DEGREES),
+        transform=grid_transform,
     )
 
 

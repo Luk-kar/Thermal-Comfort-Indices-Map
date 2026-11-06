@@ -97,10 +97,10 @@ MIN_BAND_NAMES = _band_names(COLD_BAND_PREFIX, MIN_BRACKETS)  # e.g. "days_daily
 HEAT_TOTAL_BAND = f"{HEAT_BAND_PREFIX}_above_{_format_bound(ABOVE_THRESHOLDS[0])}_total"
 COLD_TOTAL_BAND = f"{COLD_BAND_PREFIX}_below_{_format_bound(BELOW_THRESHOLDS[-1])}_total"
 
-# The NetCDF variables to read: yearly peaks plus one cumulative day count per threshold.
-SELECTED_NETCDF_FIELDS = (
-    PEAK_MAX,
-    PEAK_MIN,
-    *(f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS),
-    *(f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS),
-)
+# Cumulative NetCDF day counts, one per threshold and in threshold order. Thresholds are
+# formatted with str() as in the CDS names, e.g. "utci_days_above_26_daily_max".
+ABOVE_FIELDS = tuple(f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS)
+BELOW_FIELDS = tuple(f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS)
+
+# The NetCDF variables to read: yearly peaks plus the cumulative day counts.
+SELECTED_NETCDF_FIELDS = (PEAK_MAX, PEAK_MIN, *ABOVE_FIELDS, *BELOW_FIELDS)

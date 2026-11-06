@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+from utci_map.source.contracts.models import MapKind
+from utci_map.source.contracts.schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND
+
 DATA_DIR = Path("downloads")
 
 
@@ -15,21 +18,6 @@ OUTPUT_DIR = Path("output") / "map"
 
 
 TIF_PATH = OUTPUT_DIR / "utci_summary.tif"
-
-COLD_DAYS = "utci_cold_days"
-HEAT_DAYS = "utci_heat_days"
-
-
-COLD_PNG_PATH = OUTPUT_DIR / f"{COLD_DAYS}.png"
-
-
-HEAT_PNG_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.png"
-
-
-COLD_JSON_PATH = OUTPUT_DIR / f"{COLD_DAYS}.json"
-
-
-HEAT_JSON_PATH = OUTPUT_DIR / f"{HEAT_DAYS}.json"
 
 
 COASTLINE_PATH = Path("gisco") / "COAS_RG_10M_2016_4326.geojson"
@@ -61,6 +49,15 @@ HEAT_COLORS = (
     "#c8596c",  # dusty rose (raspberry)
     "#993233",  # dark brick red (burgundy) - most days
 )
+
+# Rendered maps, in log and render order; file stems must match frontend/config.js.
+COLD_MAP = MapKind(
+    name="cold", total_band=COLD_TOTAL_BAND, file_stem="utci_cold_days", colors=COLD_COLORS
+)
+HEAT_MAP = MapKind(
+    name="heat", total_band=HEAT_TOTAL_BAND, file_stem="utci_heat_days", colors=HEAT_COLORS
+)
+MAP_KINDS = (COLD_MAP, HEAT_MAP)
 
 DISCRETE_COLORS = False  # True = use only the palette steps, no blending
 PNG_SCALE = 1  # 1 = native size; >1 enlarges with nearest neighbor (coordinates are unaffected)

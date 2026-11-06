@@ -1,7 +1,7 @@
 """Render the cold and heat total bands of a summary GeoTIFF as indexed PNGs with sidecars."""
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -9,8 +9,7 @@ import rasterio
 from PIL import Image
 
 from utci_map.source.contracts import (
-    COLD_TOTAL_BAND,
-    HEAT_TOTAL_BAND,
+    MAP_KINDS,
     MAX_BAND_NAMES,
     MAX_INDEX,
     MIN_BAND_NAMES,
@@ -31,56 +30,67 @@ from utci_map.source.products.maps.models import (
     ValueRange,
 )
 from utci_map.source.products.maps.reprojection import reproject_to_webmercator
-from utci_map.source.runlog import logged_file_io
+from utci_map.source.runlog import logged_read, logged_write
 
 _LOGGER = logging.getLogger(__name__)
 
 DAY_UNITS = "days"
-REQUIRED_BANDS = [*MIN_BAND_NAMES, *MAX_BAND_NAMES, COLD_TOTAL_BAND, HEAT_TOTAL_BAND]
+REQUIRED_BANDS = [*MIN_BAND_NAMES, *MAX_BAND_NAMES, *(kind.total_band for kind in MAP_KINDS)]
 
 
 def render_pngs(
     tif_path: Path,
-    cold: MapOutput,
-    heat: MapOutput,
+    outputs: Mapping[str, MapOutput],
     options: RenderOptions | None = None,
-    value_ranges: tuple[ValueRange, ValueRange] | None = None,
+    value_ranges: Mapping[str, ValueRange] | None = None,
 ) -> None:
     """
-    Render the cold and heat maps of one GeoTIFF as PNGs with JSON sidecars.
+    Render every map kind of one GeoTIFF as a PNG with a JSON sidecar.
 
-    value_ranges are the (cold, heat) ranges mapped onto each palette, as returned
-    by global_value_ranges; without them each map is normalized to its own range.
-    Raise KeyError if a summary band is missing, and ValueError if the GeoTIFF
+    outputs and value_ranges are keyed by map kind name, e.g. {"cold": ..., "heat": ...}.
+    value_ranges are mapped onto each palette, as returned by global_value_ranges;
+    without them each map is normalized to its own range. Raise KeyError if a summary
+    band is missing, ValueError if outputs don't name exactly the map kinds, the GeoTIFF
     has no CRS, a map has no valid pixels, or options.png_scale is below 1.
     """
-    options = options or RenderOptions()
-    cold_range, heat_range = value_ranges or (None, None)
-    cold_layer, heat_layer, land_geometries = _load_layers(tif_path, options)
+    _check_kind_names(outputs, "outputs")
+    if value_ranges is not None:
+        _check_kind_names(value_ranges, "value_ranges")
 
-    _render_map(cold_layer, cold, options, land_geometries, cold_range)
-    _render_map(heat_layer, heat, options, land_geometries, heat_range)
+    options = options or RenderOptions()
+    layers, land_geometries = _load_layers(tif_path, options)
+
+    for name, layer in layers.items():
+        value_range = value_ranges[name] if value_ranges else None
+        _render_map(layer, outputs[name], options, land_geometries, value_range)
 
 
 def global_value_ranges(
     tif_paths: Sequence[Path], options: RenderOptions | None = None
-) -> tuple[ValueRange, ValueRange]:
+) -> dict[str, ValueRange]:
     """
-    Return the (cold, heat) value ranges spanning every GeoTIFF.
+    Return the value range of each map kind spanning every GeoTIFF, keyed by kind name.
 
     Rasters are read one at a time, with sea masked as for rendering. Raise
-    ValueError if the cold or heat band has no valid pixel in any GeoTIFF.
+    ValueError if a map kind's band has no valid pixel in any GeoTIFF.
     """
     options = options or RenderOptions()
-    cold_ranges: list[ValueRange | None] = []
-    heat_ranges: list[ValueRange | None] = []
+    ranges: dict[str, list[ValueRange | None]] = {kind.name: [] for kind in MAP_KINDS}
 
     for tif_path in tif_paths:
-        cold_layer, heat_layer, _ = _load_layers(tif_path, options)
-        cold_ranges.append(_finite_range(cold_layer.values))
-        heat_ranges.append(_finite_range(heat_layer.values))
+        layers, _ = _load_layers(tif_path, options)
+        for name, layer in layers.items():
+            ranges[name].append(_finite_range(layer.values))
 
-    return _spanning_range(cold_ranges), _spanning_range(heat_ranges)
+    return {name: _spanning_range(kind_ranges) for name, kind_ranges in ranges.items()}
+
+
+def _check_kind_names(by_kind: Mapping[str, object], argument: str) -> None:
+    """Reject a mapping whose keys are not exactly the configured map kind names."""
+    expected = {kind.name for kind in MAP_KINDS}
+
+    if set(by_kind) != expected:
+        raise ValueError(f"{argument} must have keys {sorted(expected)}, got {sorted(by_kind)}")
 
 
 def _finite_range(values: np.ndarray) -> ValueRange | None:
@@ -100,37 +110,47 @@ def _spanning_range(ranges: Sequence[ValueRange | None]) -> ValueRange:
 
 def _load_layers(
     tif_path: Path, options: RenderOptions
-) -> tuple[MapLayer, MapLayer, list[Geometry] | None]:
-    """Read the cold and heat total layers, masking sea pixels when a coastline is set."""
-    cold_days, heat_days, grid = _read_total_bands(tif_path)
+) -> tuple[dict[str, MapLayer], list[Geometry] | None]:
+    """Read each map kind's total layer, keyed by kind name, masking sea when a coastline is set."""
+    days_by_kind, grid = _read_total_bands(tif_path)
 
     land_geometries = None
     if options.coastline_path is not None:
         land_geometries = load_land_geometries(options.coastline_path)
-        land = land_mask(land_geometries, cold_days.shape, grid)
-        cold_days[~land] = np.nan
-        heat_days[~land] = np.nan
+        land = land_mask(land_geometries, _grid_shape(days_by_kind), grid)
+        for days in days_by_kind.values():
+            days[~land] = np.nan
 
-    cold_layer = MapLayer(
-        values=cold_days, grid=grid, metric_band_name=COLD_TOTAL_BAND, metric_units=DAY_UNITS
-    )
-    heat_layer = MapLayer(
-        values=heat_days, grid=grid, metric_band_name=HEAT_TOTAL_BAND, metric_units=DAY_UNITS
-    )
-    return cold_layer, heat_layer, land_geometries
+    layers = {
+        kind.name: MapLayer(
+            values=days_by_kind[kind.name],
+            grid=grid,
+            metric_band_name=kind.total_band,
+            metric_units=DAY_UNITS,
+        )
+        for kind in MAP_KINDS
+    }
+    return layers, land_geometries
 
 
-def _read_total_bands(tif_path: Path) -> tuple[np.ndarray, np.ndarray, RasterGrid]:
-    """Read the cold and heat total bands as float64 (height, width) arrays and their grid."""
-    with logged_file_io(_LOGGER, "Read", tif_path), rasterio.open(tif_path) as src:
+def _grid_shape(days_by_kind: Mapping[str, np.ndarray]) -> tuple[int, int]:
+    """Return the shared (height, width) of the total bands."""
+    height, width = next(iter(days_by_kind.values())).shape
+    return height, width
+
+
+def _read_total_bands(tif_path: Path) -> tuple[dict[str, np.ndarray], RasterGrid]:
+    """Read each map kind's total band as a float64 (height, width) array, plus their grid."""
+    with logged_read(_LOGGER, tif_path), rasterio.open(tif_path) as src:
         index = band_indices(src, REQUIRED_BANDS)
         if src.crs is None:
             raise ValueError(f"{tif_path} has no CRS")
 
-        cold_days = src.read(index[COLD_TOTAL_BAND]).astype(np.float64)
-        heat_days = src.read(index[HEAT_TOTAL_BAND]).astype(np.float64)
+        days_by_kind = {
+            kind.name: src.read(index[kind.total_band]).astype(np.float64) for kind in MAP_KINDS
+        }
         grid = RasterGrid(crs=src.crs, grid_transform=src.transform, bounds=tuple(src.bounds))
-    return cold_days, heat_days, grid
+    return days_by_kind, grid
 
 
 def _render_map(
@@ -170,7 +190,10 @@ def _render_map(
 
 def _metric_scale(layer: MapLayer, value_range: ValueRange | None, image_name: str) -> MetricScale:
     """Choose the display range, widening an empty one so the map renders in the lightest color."""
-    local = ValueRange(float(np.nanmin(layer.values)), float(np.nanmax(layer.values)))
+    local = _finite_range(layer.values)
+    if local is None:
+        raise ValueError(f"No valid pixels to scale for {image_name}")
+
     raw = value_range or local
     _LOGGER.info(
         "%s: min %.1f, max %.1f; color scale %.1f (lightest) to %.1f (darkest)",
@@ -215,8 +238,7 @@ def _write_png(
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
 
-    png_path.parent.mkdir(parents=True, exist_ok=True)
     alpha = bytes([255] * NODATA_INDEX + [0])
 
-    with logged_file_io(_LOGGER, "Wrote", png_path):
+    with logged_write(_LOGGER, png_path):
         image.save(png_path, transparency=alpha)

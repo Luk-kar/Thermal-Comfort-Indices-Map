@@ -1,9 +1,6 @@
 """Run settings, data schema and shared data types used by every pipeline stage."""
 
 from utci_map.source.contracts.config import COASTLINE_PATH as COASTLINE_PATH
-from utci_map.source.contracts.config import COLD_COLORS as COLD_COLORS
-from utci_map.source.contracts.config import COLD_JSON_PATH as COLD_JSON_PATH
-from utci_map.source.contracts.config import COLD_PNG_PATH as COLD_PNG_PATH
 from utci_map.source.contracts.config import COLOR_MAP_STEP as COLOR_MAP_STEP
 from utci_map.source.contracts.config import DATA_DIR as DATA_DIR
 from utci_map.source.contracts.config import DISCRETE_COLORS as DISCRETE_COLORS
@@ -11,13 +8,11 @@ from utci_map.source.contracts.config import END_YEAR as END_YEAR
 from utci_map.source.contracts.config import (
     EXTRACTED_FILES_WARNING_COUNT as EXTRACTED_FILES_WARNING_COUNT,
 )
-from utci_map.source.contracts.config import HEAT_COLORS as HEAT_COLORS
-from utci_map.source.contracts.config import HEAT_JSON_PATH as HEAT_JSON_PATH
-from utci_map.source.contracts.config import HEAT_PNG_PATH as HEAT_PNG_PATH
 from utci_map.source.contracts.config import LARGE_IO_WARNING_BYTES as LARGE_IO_WARNING_BYTES
 from utci_map.source.contracts.config import LOG_DIR as LOG_DIR
 from utci_map.source.contracts.config import LOG_FILE_TIME_FORMAT as LOG_FILE_TIME_FORMAT
 from utci_map.source.contracts.config import LOGGER_NAME as LOGGER_NAME
+from utci_map.source.contracts.config import MAP_KINDS as MAP_KINDS
 from utci_map.source.contracts.config import MAX_INDEX as MAX_INDEX
 from utci_map.source.contracts.config import NODATA_INDEX as NODATA_INDEX
 from utci_map.source.contracts.config import OUTPUT_DIR as OUTPUT_DIR
@@ -29,9 +24,10 @@ from utci_map.source.contracts.config import TIF_PATH as TIF_PATH
 from utci_map.source.contracts.models import Band as Band
 from utci_map.source.contracts.models import FieldRecords as FieldRecords
 from utci_map.source.contracts.models import FileRecords as FileRecords
+from utci_map.source.contracts.models import MapKind as MapKind
 from utci_map.source.contracts.models import YearlyStats as YearlyStats
-from utci_map.source.contracts.schema import ABOVE_THRESHOLDS as ABOVE_THRESHOLDS
-from utci_map.source.contracts.schema import BELOW_THRESHOLDS as BELOW_THRESHOLDS
+from utci_map.source.contracts.schema import ABOVE_FIELDS as ABOVE_FIELDS
+from utci_map.source.contracts.schema import BELOW_FIELDS as BELOW_FIELDS
 from utci_map.source.contracts.schema import COLD_TOTAL_BAND as COLD_TOTAL_BAND
 from utci_map.source.contracts.schema import HEAT_TOTAL_BAND as HEAT_TOTAL_BAND
 from utci_map.source.contracts.schema import MAX_BAND_NAMES as MAX_BAND_NAMES

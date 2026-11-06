@@ -10,7 +10,7 @@ from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
 from utci_map.source.contracts import Band
-from utci_map.source.runlog import logged_file_io
+from utci_map.source.runlog import logged_write
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,11 +26,10 @@ def write_geotiff(
     with NaN marking missing pixels. Band names become band descriptions, units become
     band tags, and start_year and end_year are stored as dataset tags.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
     height, width = bands[0][1].shape
 
     with (
-        logged_file_io(_LOGGER, "Wrote", path),
+        logged_write(_LOGGER, path),
         rasterio.open(
             path,
             "w",

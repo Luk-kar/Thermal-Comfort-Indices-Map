@@ -12,7 +12,7 @@ from rasterio.features import geometry_mask
 from rasterio.warp import transform_geom
 
 from utci_map.source.products.maps.models import WGS84_CRS, Geometry, RasterGrid
-from utci_map.source.runlog import logged_file_io
+from utci_map.source.runlog import logged_read
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def load_land_geometries(path: Path) -> list[Geometry]:
     Raise ValueError naming the file unless it holds at least one feature and every
     feature has a Polygon or MultiPolygon geometry with numeric coordinates.
     """
-    with logged_file_io(_LOGGER, "Read", path), path.open(encoding="utf-8") as source:
+    with logged_read(_LOGGER, path), path.open(encoding="utf-8") as source:
         collection = json.load(source)
 
     try:

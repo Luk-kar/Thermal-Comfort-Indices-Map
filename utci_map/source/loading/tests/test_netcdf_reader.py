@@ -8,12 +8,11 @@ import numpy as np
 import pytest
 
 pytest.importorskip("rasterio")
-from rasterio.transform import from_origin
 
 from utci_map.source.loading.netcdf_reader import read_yearly_file
 
 
-def test_reads_years_fields_values_units_and_grid(netcdf_factory):
+def test_reads_years_fields_values_units_and_grid(netcdf_factory, grid_transform):
     """
     Check that a NetCDF file is read into the expected yearly records.
 
@@ -29,7 +28,7 @@ def test_reads_years_fields_values_units_and_grid(netcdf_factory):
     assert result is not None
     assert result.years == [2016, 2017]
     assert result.shape == (4, 4)
-    np.testing.assert_allclose(tuple(result.transform), tuple(from_origin(-24, 67, 0.25, 0.25)))
+    np.testing.assert_allclose(tuple(result.transform), tuple(grid_transform))
     assert result.peak_units == {"utci_yearly_max": "degC", "utci_yearly_min": "degC"}
 
     expected = {

@@ -13,8 +13,8 @@ from typing import Literal
 import numpy as np
 
 from utci_map.source.contracts import (
-    ABOVE_THRESHOLDS,
-    BELOW_THRESHOLDS,
+    ABOVE_FIELDS,
+    BELOW_FIELDS,
     COLD_TOTAL_BAND,
     HEAT_TOTAL_BAND,
     MAX_BAND_NAMES,
@@ -52,15 +52,15 @@ def build_bands(annual: YearlyStats) -> list[Band]:
     heat_counts = _yearly_days_by_stress_category(
         annual,
         direction="above",
-        thresholds=ABOVE_THRESHOLDS,
-        stat="daily_max",
+        fields=ABOVE_FIELDS,
+        label="daily_max",
         brackets=MAX_BRACKETS,
     )
     cold_counts = _yearly_days_by_stress_category(
         annual,
         direction="below",
-        thresholds=BELOW_THRESHOLDS,
-        stat="daily_min",
+        fields=BELOW_FIELDS,
+        label="daily_min",
         brackets=MIN_BRACKETS,
     )
 
@@ -73,18 +73,19 @@ def build_bands(annual: YearlyStats) -> list[Band]:
 def _yearly_days_by_stress_category(
     annual: YearlyStats,
     direction: Direction,
-    thresholds: tuple[float, ...],
-    stat: str,
+    fields: tuple[str, ...],
+    label: str,
     brackets: Sequence[tuple[float, float]],
 ) -> list[np.ndarray]:
     """
     Turn cumulative yearly day counts into disjoint per-category counts.
 
-    Each returned array has shape (number_of_years, height, width).
+    fields are the cumulative count fields in threshold order, and label names them
+    in error messages. Each returned array has shape (number_of_years, height, width).
     E.g. above thresholds (26, 32, 38, 46) give the categories
     26-32 = days_above_26 - days_above_32, ..., 46+ = days_above_46.
     """
-    cumulative = [annual.cubes[f"utci_days_{direction}_{t}_{stat}"] for t in thresholds]
+    cumulative = [annual.cubes[name] for name in fields]
 
     if direction == "above":
         parts = [low - high for low, high in zip(cumulative, cumulative[1:])]
@@ -95,18 +96,18 @@ def _yearly_days_by_stress_category(
     else:
         raise ValueError(f"direction must be 'above' or 'below', got {direction!r}")
 
-    _check_non_negative(parts, brackets, stat)
+    _check_non_negative(parts, brackets, label)
     return parts
 
 
 def _check_non_negative(
-    parts: list[np.ndarray], brackets: Sequence[tuple[float, float]], stat: str
+    parts: list[np.ndarray], brackets: Sequence[tuple[float, float]], label: str
 ) -> None:
     """Reject negative category counts, which mean the cumulative counts are not nested."""
     for part, bracket in zip(parts, brackets):
         if np.isfinite(part).any() and np.nanmin(part) < -DAY_COUNT_TOLERANCE:
             raise ValueError(
-                f"{stat} bracket {bracket}: negative counts; "
+                f"{label} bracket {bracket}: negative counts; "
                 "the cumulative variables are not nested as assumed."
             )
 

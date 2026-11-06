@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from utci_map.source.contracts import SELECTED_NETCDF_FIELDS, FileRecords, YearlyStats
-from utci_map.source.loading.netcdf_reader import read_yearly_file, transforms_match
+from utci_map.source.loading.netcdf_reader import read_yearly_file, same_grid
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,9 +70,7 @@ def _collect_yearly_records(data_dir: Path) -> tuple[list[YearRecord], FileRecor
 
 def _check_file_consistency(loaded: FileRecords, reference: FileRecords, nc_file: Path) -> None:
     """Ensure the file uses the same spatial grid and peak units as the first file."""
-    if loaded.shape != reference.shape or not transforms_match(
-        loaded.transform, reference.transform
-    ):
+    if not same_grid(loaded, reference):
         raise ValueError(f"{nc_file.name}: grid differs from the first file")
 
     if loaded.peak_units != reference.peak_units:
