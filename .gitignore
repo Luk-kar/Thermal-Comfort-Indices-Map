@@ -8,12 +8,12 @@ __pycache__
 !README.md
 output/preview/*
 downloads/*
-.claude/*
 .pytest_cache
+.claude/*
 !.claude/hooks
 !.claude/settings.json
-!.claude/rules/python/*
+!.claude/rules
 !.claude/CLAUDE.md
-!.claude/skills/*
+!.claude/skills
 .vscode
 logs/
