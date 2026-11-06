@@ -6,20 +6,71 @@ heat-day PNG maps. Field and band names are derived from the brackets, so changi
 a bracket renames them everywhere.
 """
 
-INF = float("inf")
+from utci_map.source.contracts.models import Bracket, Direction, StressSide
 
-Bracket = tuple[float, float]  # (lower, upper) UTCI bound in °C
+INF = float("inf")
 
 PEAK_MAX = "utci_yearly_max"
 PEAK_MIN = "utci_yearly_min"
-
-HEAT_BAND_PREFIX = "days_daily_max"
-COLD_BAND_PREFIX = "days_daily_min"
 
 # Heat stress is counted from the daily maximum UTCI; the last bracket is open-ended.
 MAX_BRACKETS: tuple[Bracket, ...] = ((26, 32), (32, 38), (38, 46), (46, INF))
 # Cold stress is counted from the daily minimum UTCI; the first bracket is open-ended.
 MIN_BRACKETS: tuple[Bracket, ...] = ((-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9))
+
+_OPEN_LAST = "The last 'above' bracket must be open-ended (upper bound inf)"
+_OPEN_FIRST = "The first 'below' bracket must be open-ended (lower bound -inf)"
+
+
+def _side(
+    name: str, statistic: str, brackets: tuple[Bracket, ...], direction: Direction
+) -> StressSide:
+    """
+    Derive the field and band names of one stress side from its brackets.
+
+    E.g. statistic "daily_max", direction "above" and bracket (26, 32) give the field
+    "utci_days_above_26_daily_max", the band "days_daily_max_26_32" and the total band
+    "days_daily_max_above_26_total". Thresholds keep their str() form, as in the CDS names.
+    """
+    thresholds = _thresholds(brackets, direction)
+    prefix = f"days_{statistic}"
+    # The total counts every day past the mildest threshold.
+    mildest = thresholds[0] if direction == "above" else thresholds[-1]
+
+    return StressSide(
+        name=name,
+        direction=direction,
+        brackets=brackets,
+        fields=tuple(f"utci_days_{direction}_{threshold}_{statistic}" for threshold in thresholds),
+        band_names=_band_names(prefix, brackets),
+        total_band=f"{prefix}_{direction}_{_format_bound(mildest)}_total",
+    )
+
+
+def _thresholds(brackets: tuple[Bracket, ...], direction: Direction) -> tuple[float, ...]:
+    """
+    Return the bracket edges that match the cumulative CDS day counts.
+
+    'above' counts use the lower edge of every bracket and need an open-ended last
+    bracket, e.g. ((26, 32), (32, inf)) -> (26, 32). 'below' counts use the upper edge
+    and need an open-ended first bracket, e.g. ((-inf, -40), (-40, -27)) -> (-40, -27).
+    """
+    _check_contiguous(brackets)
+
+    if direction == "above":
+        _check_open_ended(brackets[-1], is_open=brackets[-1][1] == INF, rule=_OPEN_LAST)
+        return tuple(lower for lower, _ in brackets)
+    if direction == "below":
+        _check_open_ended(brackets[0], is_open=brackets[0][0] == -INF, rule=_OPEN_FIRST)
+        return tuple(upper for _, upper in brackets)
+    raise ValueError(f"direction must be 'above' or 'below', got {direction!r}")
+
+
+def _check_open_ended(bracket: Bracket, *, is_open: bool, rule: str) -> None:
+    """Reject a closed outermost bracket, which the cumulative counts can't describe."""
+    if not is_open:
+        lower, upper = bracket
+        raise ValueError(f"{rule}, but it is {_format_bound(lower)} to {_format_bound(upper)}")
 
 
 def _format_bound(value: float) -> str:
@@ -31,42 +82,6 @@ def _format_bound(value: float) -> str:
         return "-inf"
 
     return f"{value:g}"
-
-
-def _above_thresholds(brackets: tuple[Bracket, ...]) -> tuple[float, ...]:
-    """
-    Return the lower edge of every bracket, matching cumulative 'days above' counts.
-
-    E.g. ((26, 32), (32, inf)) -> (26, 32). The last bracket must be open-ended.
-    """
-    _check_contiguous(brackets)
-
-    lower, upper = brackets[-1]
-    if upper != INF:
-        raise ValueError(
-            "The last 'above' bracket must be open-ended (upper bound inf), "
-            f"but it is {_format_bound(lower)} to {_format_bound(upper)}"
-        )
-
-    return tuple(lower for lower, _ in brackets)
-
-
-def _below_thresholds(brackets: tuple[Bracket, ...]) -> tuple[float, ...]:
-    """
-    Return the upper edge of every bracket, matching cumulative 'days below' counts.
-
-    E.g. ((-inf, -40), (-40, -27)) -> (-40, -27). The first bracket must be open-ended.
-    """
-    _check_contiguous(brackets)
-
-    lower, upper = brackets[0]
-    if lower != -INF:
-        raise ValueError(
-            "The first 'below' bracket must be open-ended (lower bound -inf), "
-            f"but it is {_format_bound(lower)} to {_format_bound(upper)}"
-        )
-
-    return tuple(upper for _, upper in brackets)
 
 
 def _check_contiguous(brackets: tuple[Bracket, ...]) -> None:
@@ -87,20 +102,10 @@ def _band_names(prefix: str, brackets: tuple[Bracket, ...]) -> tuple[str, ...]:
     )
 
 
-ABOVE_THRESHOLDS = _above_thresholds(MAX_BRACKETS)  # (26, 32, 38, 46)
-BELOW_THRESHOLDS = _below_thresholds(MIN_BRACKETS)  # (-40, -27, -13, 0, 9)
-
-MAX_BAND_NAMES = _band_names(HEAT_BAND_PREFIX, MAX_BRACKETS)  # e.g. "days_daily_max_26_32"
-MIN_BAND_NAMES = _band_names(COLD_BAND_PREFIX, MIN_BRACKETS)  # e.g. "days_daily_min_0_9"
-
-# Days in any heat or cold category, e.g. "days_daily_max_above_26_total".
-HEAT_TOTAL_BAND = f"{HEAT_BAND_PREFIX}_above_{_format_bound(ABOVE_THRESHOLDS[0])}_total"
-COLD_TOTAL_BAND = f"{COLD_BAND_PREFIX}_below_{_format_bound(BELOW_THRESHOLDS[-1])}_total"
-
-# Cumulative NetCDF day counts, one per threshold and in threshold order. Thresholds are
-# formatted with str() as in the CDS names, e.g. "utci_days_above_26_daily_max".
-ABOVE_FIELDS = tuple(f"utci_days_above_{t}_daily_max" for t in ABOVE_THRESHOLDS)
-BELOW_FIELDS = tuple(f"utci_days_below_{t}_daily_min" for t in BELOW_THRESHOLDS)
+# E.g. HEAT_SIDE.band_names[0] == "days_daily_max_26_32" and
+# COLD_SIDE.total_band == "days_daily_min_below_9_total".
+HEAT_SIDE = _side("heat", "daily_max", MAX_BRACKETS, "above")
+COLD_SIDE = _side("cold", "daily_min", MIN_BRACKETS, "below")
 
 # The NetCDF variables to read: yearly peaks plus the cumulative day counts.
-SELECTED_NETCDF_FIELDS = (PEAK_MAX, PEAK_MIN, *ABOVE_FIELDS, *BELOW_FIELDS)
+SELECTED_NETCDF_FIELDS = (PEAK_MAX, PEAK_MIN, *HEAT_SIDE.fields, *COLD_SIDE.fields)

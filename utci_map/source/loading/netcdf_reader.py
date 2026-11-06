@@ -107,10 +107,10 @@ def _read_selected_fields(uris: dict[str, str], nc_file: Path) -> FileRecords:
         field = _read_field(uris[name], nc_file, name)
 
         if field.years != reference.years:
-            raise ValueError(f"{nc_file.name}:{name}: time axis differs from {reference_name}")
+            raise _field_error(nc_file, name, f"time axis differs from {reference_name}")
 
         if not same_grid(field, reference):
-            raise ValueError(f"{nc_file.name}:{name}: grid differs from {reference_name}")
+            raise _field_error(nc_file, name, f"grid differs from {reference_name}")
 
         fields[name] = field
 
@@ -132,7 +132,7 @@ def _read_field(uri: str, nc_file: Path, name: str) -> FieldRecords:
         _check_geographic(tags, nc_file, name)
         _check_north_up_grid(src.transform, nc_file, name)
         if not src.indexes:
-            raise ValueError(f"{nc_file.name}:{name}: no time steps")
+            raise _field_error(nc_file, name, "no time steps")
 
         return FieldRecords(
             years=[_year_of_time_step(tags, src.tags(band)) for band in src.indexes],
@@ -148,7 +148,7 @@ def _check_geographic(dataset_tags: dict[str, str], nc_file: Path, name: str) ->
     for key, expected in GEOGRAPHIC_UNITS.items():
         found = dataset_tags.get(key)
         if found is not None and found != expected:
-            raise ValueError(f"{nc_file.name}:{name}: {key}={found!r}, expected {expected!r}")
+            raise _field_error(nc_file, name, f"{key}={found!r}, expected {expected!r}")
 
 
 def _check_north_up_grid(transform: Affine, nc_file: Path, name: str) -> None:
@@ -159,7 +159,7 @@ def _check_north_up_grid(transform: Affine, nc_file: Path, name: str) -> None:
         or abs(transform.b) > ROTATION_TOLERANCE
         or abs(transform.d) > ROTATION_TOLERANCE
     ):
-        raise ValueError(f"{nc_file.name}:{name}: grid is not an unrotated north-up raster")
+        raise _field_error(nc_file, name, "grid is not an unrotated north-up raster")
 
 
 def _year_of_time_step(dataset_tags: dict[str, str], band_tags: dict[str, str]) -> int:
@@ -223,9 +223,9 @@ def _read_physical(src: DatasetReader, band: int, name: str, nc_file: Path) -> n
     offset = float(src.offsets[band - 1])
 
     if not math.isfinite(scale) or scale <= 0:
-        raise ValueError(f"{nc_file.name}:{name}: invalid scale_factor {scale!r}")
+        raise _field_error(nc_file, name, f"invalid scale_factor {scale!r}")
     if not math.isfinite(offset):
-        raise ValueError(f"{nc_file.name}:{name}: invalid add_offset {offset!r}")
+        raise _field_error(nc_file, name, f"invalid add_offset {offset!r}")
 
     raw = src.read(band, masked=True).astype(np.float64)
     values = raw.filled(np.nan) * scale + offset
@@ -237,3 +237,8 @@ def _read_peak_unit(src: DatasetReader, dataset_tags: dict[str, str], name: str)
     """Find the units of a yearly peak variable, or '' if the file doesn't declare any."""
     unit = src.units[0] or src.tags(1).get("units") or dataset_tags.get(f"{name}#units") or ""
     return str(unit)
+
+
+def _field_error(nc_file: Path, name: str, problem: str) -> ValueError:
+    """Build an error naming the file and field, e.g. 'utci_2015.nc:utci_yearly_max: no data'."""
+    return ValueError(f"{nc_file.name}:{name}: {problem}")

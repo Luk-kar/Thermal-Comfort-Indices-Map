@@ -45,6 +45,8 @@ Ruff and mypy enforce formatting, imports, naming, type hints, and the complexit
 
 - State each module's purpose in its docstring. Use one line for simple helpers and add detail for public functions.
 - Show non-obvious transformations with a concrete example ("E.g. ...").
+- Write the expansion of a domain abbreviation in parentheses right after it, the first time it appears in a module's docstrings and comments: "CDS (Copernicus Climate Data Store)", "UTCI (Universal Thermal Climate Index)". Common technical abbreviations such as `png`, `json` or `crs` need no expansion.
+- When code calls an external API or depends on the shape of external data, such as the variables and units of a CDS dataset or the layout of a GISCO file, link to its documentation in the docstring of the module, class or function that does so.
 - Use comments to explain why, not to restate the code.
 - After each module's docstring is a new line
 

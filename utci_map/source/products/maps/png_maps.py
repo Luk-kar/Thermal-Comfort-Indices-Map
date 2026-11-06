@@ -7,15 +7,15 @@ from pathlib import Path
 import numpy as np
 import rasterio
 from PIL import Image
+from rasterio.io import DatasetReader
 
 from utci_map.source.contracts import (
+    COLD_SIDE,
+    HEAT_SIDE,
     MAP_KINDS,
-    MAX_BAND_NAMES,
     MAX_INDEX,
-    MIN_BAND_NAMES,
     NODATA_INDEX,
 )
-from utci_map.source.products.geotiff import band_indices
 from utci_map.source.products.maps.encoding import palette_rgb, to_indices, write_sidecar
 from utci_map.source.products.maps.land_mask import land_mask, load_land_geometries
 from utci_map.source.products.maps.models import (
@@ -35,7 +35,11 @@ from utci_map.source.runlog import logged_read, logged_write
 _LOGGER = logging.getLogger(__name__)
 
 DAY_UNITS = "days"
-REQUIRED_BANDS = [*MIN_BAND_NAMES, *MAX_BAND_NAMES, *(kind.total_band for kind in MAP_KINDS)]
+REQUIRED_BANDS = [
+    *COLD_SIDE.band_names,
+    *HEAT_SIDE.band_names,
+    *(kind.total_band for kind in MAP_KINDS),
+]
 
 
 def render_pngs(
@@ -142,7 +146,7 @@ def _grid_shape(days_by_kind: Mapping[str, np.ndarray]) -> tuple[int, int]:
 def _read_total_bands(tif_path: Path) -> tuple[dict[str, np.ndarray], RasterGrid]:
     """Read each map kind's total band as a float64 (height, width) array, plus their grid."""
     with logged_read(_LOGGER, tif_path), rasterio.open(tif_path) as src:
-        index = band_indices(src, REQUIRED_BANDS)
+        index = _band_indices(src, REQUIRED_BANDS)
         if src.crs is None:
             raise ValueError(f"{tif_path} has no CRS")
 
@@ -151,6 +155,16 @@ def _read_total_bands(tif_path: Path) -> tuple[dict[str, np.ndarray], RasterGrid
         }
         grid = RasterGrid(crs=src.crs, grid_transform=src.transform, bounds=tuple(src.bounds))
     return days_by_kind, grid
+
+
+def _band_indices(src: DatasetReader, required_names: Sequence[str]) -> dict[str, int]:
+    """Map band descriptions to 1-based band indices, raising KeyError if any are missing."""
+    index = {description: i for i, description in enumerate(src.descriptions, start=1)}
+    missing = [name for name in required_names if name not in index]
+
+    if missing:
+        raise KeyError(f"Bands missing in {src.name}: {missing}")
+    return index
 
 
 def _render_map(

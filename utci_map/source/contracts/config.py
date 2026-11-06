@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from utci_map.source.contracts.models import MapKind
-from utci_map.source.contracts.schema import COLD_TOTAL_BAND, HEAT_TOTAL_BAND
+from utci_map.source.contracts.schema import COLD_SIDE, HEAT_SIDE
 
 DATA_DIR = Path("downloads")
 
@@ -52,10 +52,10 @@ HEAT_COLORS = (
 
 # Rendered maps, in log and render order; file stems must match frontend/config.js.
 COLD_MAP = MapKind(
-    name="cold", total_band=COLD_TOTAL_BAND, file_stem="utci_cold_days", colors=COLD_COLORS
+    name="cold", total_band=COLD_SIDE.total_band, file_stem="utci_cold_days", colors=COLD_COLORS
 )
 HEAT_MAP = MapKind(
-    name="heat", total_band=HEAT_TOTAL_BAND, file_stem="utci_heat_days", colors=HEAT_COLORS
+    name="heat", total_band=HEAT_SIDE.total_band, file_stem="utci_heat_days", colors=HEAT_COLORS
 )
 MAP_KINDS = (COLD_MAP, HEAT_MAP)
 

@@ -1,11 +1,34 @@
 """Data contracts between the loading, computation and output stages."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from rasterio.transform import Affine
 
 Band = tuple[str, np.ndarray, str]  # (name, values with shape (height, width), units)
+Bracket = tuple[float, float]  # (lower, upper) UTCI bound in °C
+# How the day counts from the Copernicus Climate Data Store (CDS) accumulate.
+Direction = Literal["above", "below"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class StressSide:
+    """
+    Describe the heat or cold side of the thermal-stress categories.
+
+    The fields are the cumulative CDS day counts, one per threshold in threshold order,
+    and band_names hold one summary band per bracket. E.g. the heat side has direction
+    "above", fields ("utci_days_above_26_daily_max", ...), band_names
+    ("days_daily_max_26_32", ...) and total_band "days_daily_max_above_26_total".
+    """
+
+    name: str  # "heat" or "cold"
+    direction: Direction
+    brackets: tuple[Bracket, ...]
+    fields: tuple[str, ...]
+    band_names: tuple[str, ...]
+    total_band: str
 
 
 @dataclass(frozen=True, kw_only=True)

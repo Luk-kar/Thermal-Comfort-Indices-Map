@@ -1,4 +1,4 @@
-"""Write the summary GeoTIFF and look up bands by description."""
+"""Write the summary GeoTIFF."""
 
 import logging
 from collections.abc import Sequence
@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from rasterio.io import DatasetReader
 from rasterio.transform import Affine
 
 from utci_map.source.contracts import Band
@@ -51,13 +50,3 @@ def write_geotiff(
             dst.update_tags(index, units=units)
 
         dst.update_tags(start_year=start_year, end_year=end_year)
-
-
-def band_indices(src: DatasetReader, required_names: Sequence[str]) -> dict[str, int]:
-    """Map band descriptions to 1-based band indices, raising KeyError if any are missing."""
-    index = {description: i for i, description in enumerate(src.descriptions, start=1)}
-    missing = [name for name in required_names if name not in index]
-
-    if missing:
-        raise KeyError(f"Bands missing in {src.name}: {missing}")
-    return index
