@@ -1,5 +1,5 @@
 """
-Compute summary bands from yearly UTCI statistics.
+Compute summary bands from yearly UTCI (Universal Thermal Climate Index) statistics.
 
 UTCI thermal-stress categories and thresholds:
 https://www.ipma.pt/en/enciclopedia/amb.atmosfera/index.bioclima/index.html?page=utci.xml
@@ -46,7 +46,7 @@ def build_bands(annual: YearlyStats) -> list[Band]:
     minimum UTCI values in Celsius with the first years they occurred.
     """
     counts_by_side = {
-        side.name: _yearly_days_by_stress_category(annual, side) for side in CATEGORY_BAND_ORDER
+        side: _yearly_days_by_stress_category(annual, side) for side in CATEGORY_BAND_ORDER
     }
 
     bands = _category_day_bands(counts_by_side)
@@ -68,11 +68,10 @@ def _yearly_days_by_stress_category(annual: YearlyStats, side: StressSide) -> li
     if side.direction == "above":
         parts = [low - high for low, high in zip(cumulative, cumulative[1:])]
         parts.append(cumulative[-1])
-    elif side.direction == "below":
+    else:
+        # StressSide already rejects any direction other than "above" or "below".
         parts = [cumulative[0]]
         parts.extend(high - low for low, high in zip(cumulative, cumulative[1:]))
-    else:
-        raise ValueError(f"direction must be 'above' or 'below', got {side.direction!r}")
 
     _check_non_negative(parts, side)
     return parts
@@ -83,23 +82,23 @@ def _check_non_negative(parts: list[np.ndarray], side: StressSide) -> None:
     for part, bracket in zip(parts, side.brackets):
         if np.isfinite(part).any() and np.nanmin(part) < -DAY_COUNT_TOLERANCE:
             raise ValueError(
-                f"{side.name} bracket {bracket}: negative counts; "
-                "the cumulative variables are not nested as assumed."
+                f"{side.name} bracket {bracket}: negative counts; the cumulative "
+                f"variables {side.fields} are not nested as assumed."
             )
 
 
-def _category_day_bands(counts_by_side: Mapping[str, list[np.ndarray]]) -> list[Band]:
+def _category_day_bands(counts_by_side: Mapping[StressSide, list[np.ndarray]]) -> list[Band]:
     """Summarize each stress category using its median yearly day count."""
     # np.median propagates NaN, so a pixel missing in any year stays missing.
     return [
         (name, np.median(yearly_counts, axis=0), "days")
         for side in CATEGORY_BAND_ORDER
-        for name, yearly_counts in zip(side.band_names, counts_by_side[side.name])
+        for name, yearly_counts in zip(side.band_names, counts_by_side[side])
     ]
 
 
 def _total_stress_day_bands(
-    years: np.ndarray, counts_by_side: Mapping[str, list[np.ndarray]]
+    years: np.ndarray, counts_by_side: Mapping[StressSide, list[np.ndarray]]
 ) -> list[Band]:
     """Validate yearly cold and heat totals and summarize their median day counts."""
     days_in_year = np.array(
@@ -109,10 +108,11 @@ def _total_stress_day_bands(
     bands: list[Band] = []
     for side in TOTAL_BAND_ORDER:
         # Sum categories within each year before taking the median across years.
-        total = np.sum(counts_by_side[side.name], axis=0)
+        total = np.sum(counts_by_side[side], axis=0)
         if np.isfinite(total).any() and np.nanmax(total - days_in_year) > DAY_COUNT_TOLERANCE:
             raise ValueError(
-                f"{side.name}: an annual total exceeds the number of days in its year."
+                f"{side.name}: an annual total of the variables {side.fields} "
+                "exceeds the number of days in its year."
             )
 
         bands.append((side.total_band, np.median(total, axis=0), "days"))

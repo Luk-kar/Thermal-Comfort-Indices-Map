@@ -1,9 +1,11 @@
 """
-Define UTCI fields, stress categories, thresholds and band naming rules.
+Define UTCI (Universal Thermal Climate Index) fields, stress categories, thresholds and band names.
 
 These names are shared by the NetCDF loader, the summary GeoTIFF and the cold- and
 heat-day PNG maps. Field and band names are derived from the brackets, so changing
-a bracket renames them everywhere.
+a bracket renames them everywhere. The field names follow the variables of the
+CDS (Copernicus Climate Data Store) dataset:
+https://cds.climate.copernicus.eu/datasets/derived-utci-historical
 """
 
 from utci_map.source.contracts.models import Bracket, Direction, StressSide
@@ -30,7 +32,8 @@ def _side(
 
     E.g. statistic "daily_max", direction "above" and bracket (26, 32) give the field
     "utci_days_above_26_daily_max", the band "days_daily_max_26_32" and the total band
-    "days_daily_max_above_26_total". Thresholds keep their str() form, as in the CDS names.
+    "days_daily_max_above_26_total". Thresholds are formatted with _format_bound, so a
+    float edge such as 26.0 still gives the CDS variable name "..._26_...", not "..._26.0_...".
     """
     thresholds = _thresholds(brackets, direction)
     prefix = f"days_{statistic}"
@@ -39,9 +42,13 @@ def _side(
 
     return StressSide(
         name=name,
+        statistic=statistic,
         direction=direction,
         brackets=brackets,
-        fields=tuple(f"utci_days_{direction}_{threshold}_{statistic}" for threshold in thresholds),
+        fields=tuple(
+            f"utci_days_{direction}_{_format_bound(threshold)}_{statistic}"
+            for threshold in thresholds
+        ),
         band_names=_band_names(prefix, brackets),
         total_band=f"{prefix}_{direction}_{_format_bound(mildest)}_total",
     )
