@@ -41,6 +41,27 @@ def test_mismatched_name_count_is_rejected_with_counts(field_name: str) -> None:
         make_side(**{field_name: ("only_one",)})
 
 
+def test_closed_last_above_bracket_is_rejected() -> None:
+    with pytest.raises(ValueError, match="last 'above' bracket must be open-ended.*32 to 40"):
+        make_side(brackets=((26, 32), (32, 40)))
+
+
+def test_closed_first_below_bracket_is_rejected() -> None:
+    with pytest.raises(ValueError, match="first 'below' bracket must be open-ended.*-50 to -40"):
+        make_side(direction="below", brackets=((-50, -40), (-40, 9)))
+
+
+def test_open_first_below_bracket_is_accepted() -> None:
+    side = make_side(direction="below", brackets=((float("-inf"), -40), (-40, 9)))
+
+    assert side.direction == "below"
+
+
+def test_gap_between_brackets_is_rejected() -> None:
+    with pytest.raises(ValueError, match="not contiguous: 32 != 34"):
+        make_side(brackets=((26, 32), (34, float("inf"))))
+
+
 def test_side_is_hashable_and_usable_as_dictionary_key() -> None:
     side = make_side()
 

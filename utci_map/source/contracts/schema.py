@@ -20,9 +20,6 @@ MAX_BRACKETS: tuple[Bracket, ...] = ((26, 32), (32, 38), (38, 46), (46, INF))
 # Cold stress is counted from the daily minimum UTCI; the first bracket is open-ended.
 MIN_BRACKETS: tuple[Bracket, ...] = ((-INF, -40), (-40, -27), (-27, -13), (-13, 0), (0, 9))
 
-_OPEN_LAST = "The last 'above' bracket must be open-ended (upper bound inf)"
-_OPEN_FIRST = "The first 'below' bracket must be open-ended (lower bound -inf)"
-
 
 def _side(
     name: str, statistic: str, brackets: tuple[Bracket, ...], direction: Direction
@@ -61,23 +58,12 @@ def _thresholds(brackets: tuple[Bracket, ...], direction: Direction) -> tuple[fl
     'above' counts use the lower edge of every bracket and need an open-ended last
     bracket, e.g. ((26, 32), (32, inf)) -> (26, 32). 'below' counts use the upper edge
     and need an open-ended first bracket, e.g. ((-inf, -40), (-40, -27)) -> (-40, -27).
+    StressSide validates the direction, contiguity and open ends of the finished side.
     """
-    _check_contiguous(brackets)
-
     if direction == "above":
-        _check_open_ended(brackets[-1], is_open=brackets[-1][1] == INF, rule=_OPEN_LAST)
         return tuple(lower for lower, _ in brackets)
-    if direction == "below":
-        _check_open_ended(brackets[0], is_open=brackets[0][0] == -INF, rule=_OPEN_FIRST)
-        return tuple(upper for _, upper in brackets)
-    raise ValueError(f"direction must be 'above' or 'below', got {direction!r}")
 
-
-def _check_open_ended(bracket: Bracket, *, is_open: bool, rule: str) -> None:
-    """Reject a closed outermost bracket, which the cumulative counts can't describe."""
-    if not is_open:
-        lower, upper = bracket
-        raise ValueError(f"{rule}, but it is {_format_bound(lower)} to {_format_bound(upper)}")
+    return tuple(upper for _, upper in brackets)
 
 
 def _format_bound(value: float) -> str:
@@ -89,13 +75,6 @@ def _format_bound(value: float) -> str:
         return "-inf"
 
     return f"{value:g}"
-
-
-def _check_contiguous(brackets: tuple[Bracket, ...]) -> None:
-    """Reject brackets with gaps or overlaps between neighbors."""
-    for (_, upper), (lower, _) in zip(brackets, brackets[1:]):
-        if upper != lower:
-            raise ValueError(f"Brackets are not contiguous: {upper} != {lower}")
 
 
 def _band_names(prefix: str, brackets: tuple[Bracket, ...]) -> tuple[str, ...]:

@@ -30,7 +30,7 @@ class StressSide:
     total_band: str
 
     def __post_init__(self) -> None:
-        """Reject a side whose direction is unknown or whose names don't match its brackets."""
+        """Reject an unknown direction, mismatched names, or brackets the counts can't describe."""
         if self.direction not in ("above", "below"):
             raise ValueError(f"direction must be 'above' or 'below', got {self.direction!r}")
 
@@ -40,3 +40,26 @@ class StressSide:
                 f"{len(self.brackets)} brackets, {len(self.fields)} fields "
                 f"and {len(self.band_names)} band names"
             )
+
+        self._check_contiguous()
+        self._check_open_ended()
+
+    def _check_contiguous(self) -> None:
+        """Reject brackets with gaps or overlaps between neighbors."""
+        for (_, upper), (lower, _) in zip(self.brackets, self.brackets[1:]):
+            if upper != lower:
+                raise ValueError(f"Brackets are not contiguous: {upper} != {lower}")
+
+    def _check_open_ended(self) -> None:
+        """Reject a closed outermost bracket, which cumulative day counts can't describe."""
+        if self.direction == "above":
+            outer = self.brackets[-1]
+            is_open = outer[1] == float("inf")
+            requirement = "The last 'above' bracket must be open-ended (upper bound inf)"
+        else:
+            outer = self.brackets[0]
+            is_open = outer[0] == float("-inf")
+            requirement = "The first 'below' bracket must be open-ended (lower bound -inf)"
+
+        if not is_open:
+            raise ValueError(f"{requirement}, but it is {outer[0]:g} to {outer[1]:g}")

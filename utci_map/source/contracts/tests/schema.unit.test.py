@@ -23,16 +23,6 @@ def test_below_total_band_uses_the_last_upper_edge() -> None:
     assert side.total_band == "days_daily_min_below_9_total"
 
 
-def test_closed_last_above_bracket_is_rejected() -> None:
-    with pytest.raises(ValueError, match="last 'above' bracket must be open-ended"):
-        _side("heat", "daily_max", ((26, 32), (32, 40)), "above")
-
-
-def test_closed_first_below_bracket_is_rejected() -> None:
-    with pytest.raises(ValueError, match="first 'below' bracket must be open-ended"):
-        _side("cold", "daily_min", ((-50, -40), (-40, 9)), "below")
-
-
-def test_gap_between_brackets_is_rejected() -> None:
+def test_invalid_brackets_are_rejected_when_the_side_is_built() -> None:
     with pytest.raises(ValueError, match="not contiguous"):
         _side("heat", "daily_max", ((26, 32), (34, INF)), "above")

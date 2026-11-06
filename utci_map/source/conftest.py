@@ -6,6 +6,8 @@ from datetime import datetime
 import numpy as np
 import pytest
 
+from utci_map.source.contracts import COLD_SIDE, HEAT_SIDE
+
 GRID_SIZE = 4
 PIXEL_DEGREES = 0.25
 NORTH = 67.0
@@ -14,12 +16,14 @@ FILL_VALUE = -9999
 
 # Value of each field in the first year; later years add 1, except as noted in yearly_statistics.
 PEAK_BASE_VALUES = {"utci_yearly_max": 30, "utci_yearly_min": -20}
-ABOVE_BASE_COUNTS = {26: 10, 32: 6, 38: 3, 46: 1}
-BELOW_BASE_COUNTS = {-40: 1, -27: 3, -13: 6, 0: 10, 9: 15}
+# One count per field of the side, in threshold order. Field names come from the schema,
+# so renaming a field or changing a bracket reaches every NetCDF fixture.
+HEAT_BASE_COUNTS = (10, 6, 3, 1)
+COLD_BASE_COUNTS = (1, 3, 6, 10, 15)
 BASE_VALUES = {
     **PEAK_BASE_VALUES,
-    **{f"utci_days_above_{t}_daily_max": count for t, count in ABOVE_BASE_COUNTS.items()},
-    **{f"utci_days_below_{t}_daily_min": count for t, count in BELOW_BASE_COUNTS.items()},
+    **dict(zip(HEAT_SIDE.fields, HEAT_BASE_COUNTS, strict=True)),
+    **dict(zip(COLD_SIDE.fields, COLD_BASE_COUNTS, strict=True)),
 }
 
 
